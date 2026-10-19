@@ -49,6 +49,15 @@ class AuditConfig:
 
 
 @dataclass(frozen=True)
+class TransportSecurityConfig:
+    """Controles del servidor para transporte inseguro y tiempos de espera."""
+
+    allow_insecure_tcp_auth: bool
+    connection_timeout_seconds: int
+    tls_handshake_timeout_seconds: int
+
+
+@dataclass(frozen=True)
 class SSHIntegrationConfig:
     """Configuración externa para una prueba de integración OpenSSH."""
 
@@ -97,6 +106,34 @@ def load_communication_mode() -> str:
     if mode not in {"tcp", "tls"}:
         raise ValueError("COMMUNICATION_MODE debe ser 'tcp' o 'tls'.")
     return mode
+
+
+def _load_boolean(variable: str, default: bool = False) -> bool:
+    value = os.getenv(variable, "1" if default else "0").strip().lower()
+    if value in {"1", "true", "yes"}:
+        return True
+    if value in {"", "0", "false", "no"}:
+        return False
+    raise ValueError(f"{variable} debe ser 0 o 1.")
+
+
+def _load_timeout(variable: str, default: int) -> int:
+    try:
+        timeout = int(os.getenv(variable, str(default)))
+    except ValueError as error:
+        raise ValueError(f"{variable} debe ser un número entero.") from error
+    if not 1 <= timeout <= 60:
+        raise ValueError(f"{variable} debe estar entre 1 y 60 segundos.")
+    return timeout
+
+
+def load_transport_security_config() -> TransportSecurityConfig:
+    """Carga controles seguros; la autenticación sobre TCP queda desactivada por defecto."""
+    return TransportSecurityConfig(
+        allow_insecure_tcp_auth=_load_boolean("ALLOW_INSECURE_TCP_AUTH"),
+        connection_timeout_seconds=_load_timeout("CONNECTION_TIMEOUT_SECONDS", 10),
+        tls_handshake_timeout_seconds=_load_timeout("TLS_HANDSHAKE_TIMEOUT_SECONDS", 10),
+    )
 
 
 def _required_path(variable: str) -> Path:

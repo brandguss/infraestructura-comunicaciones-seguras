@@ -15,6 +15,7 @@ from .config import (
     load_communication_mode,
     load_tcp_config,
     load_tls_client_config,
+    load_transport_security_config,
     ipsec_simulation_enabled,
     load_ipsec_simulation_settings,
 )
@@ -102,6 +103,10 @@ def main() -> None:
     try:
         if bool(args.username) != bool(args.operation):
             parser.error("Use --username y --operation juntos.")
+        communication_mode = load_communication_mode()
+        transport_security = load_transport_security_config()
+        if args.operation and communication_mode == "tcp" and not transport_security.allow_insecure_tcp_auth:
+            parser.error("Las operaciones autenticadas requieren TLS; ALLOW_INSECURE_TCP_AUTH=1 solo habilita un laboratorio inseguro.")
         message = args.message
         if args.operation:
             message = build_authenticated_request(args.username, getpass.getpass("Contraseña: "), args.operation)
@@ -111,7 +116,7 @@ def main() -> None:
         if simulator:
             message = simulator.encapsulate(message)
         network_config = load_tcp_config()
-        if load_communication_mode() == "tls":
+        if communication_mode == "tls":
             print(send_tls_message(
                 network_config.host,
                 network_config.port,

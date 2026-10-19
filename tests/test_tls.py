@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.comunicaciones_seguras.config import TLSClientConfig, TLSServerConfig
 from src.comunicaciones_seguras.tcp_client import send_tls_message
-from src.comunicaciones_seguras.tcp_server import create_server_tls_context, handle_connection
+from src.comunicaciones_seguras.tcp_server import _wrap_tls_connection, create_server_tls_context, handle_connection
 
 
 class TLSExternalMaterialTests(unittest.TestCase):
@@ -110,6 +110,15 @@ class TLSConnectionErrorTests(unittest.TestCase):
         config = TLSClientConfig(ca_file=Path("ca-inexistente.crt"), server_name="localhost")
         with self.assertRaises(ConnectionError):
             send_tls_message("127.0.0.1", unused_port, "Sin servidor", config)
+
+    def test_slow_handshake_is_rejected_without_blocking(self) -> None:
+        class SlowContext:
+            def wrap_socket(self, connection: socket.socket, *, server_side: bool) -> socket.socket:
+                raise TimeoutError("simulated slow handshake")
+
+        client, server = socket.socketpair()
+        self.assertIsNone(_wrap_tls_connection(SlowContext(), server, ("local", 0), 1, None))  # type: ignore[arg-type]
+        client.close()
 
 
 if __name__ == "__main__":

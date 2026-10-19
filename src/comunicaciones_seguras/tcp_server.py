@@ -18,6 +18,7 @@ from .config import (
     load_auth_config,
     load_tcp_config,
     load_tls_server_config,
+    load_transport_security_config,
     ipsec_simulation_enabled,
     load_ipsec_simulation_settings,
 )
@@ -68,6 +69,16 @@ def _record_ipsec_rejection(audit_logger: AuditLogger | None, reason: str) -> No
         LOGGER.error("No se pudo registrar el rechazo de simulación: %s", error)
 
 
+def _record_transport_rejection(audit_logger: AuditLogger | None, reason: str) -> None:
+    """Registra rechazos de transporte sin conservar contenido de la solicitud."""
+    if audit_logger is None:
+        return
+    try:
+        audit_logger.record(username=None, operation="transport", result="denied", reason=reason)
+    except OSError as error:
+        LOGGER.error("No se pudo registrar el rechazo de transporte: %s", error)
+
+
 def handle_connection(
     connection: socket.socket,
     address: tuple[str, int],
@@ -76,6 +87,8 @@ def handle_connection(
     protected_error: str | None = None,
     ipsec_simulator: IPSecSimulator | None = None,
     ipsec_required: bool = False,
+    transport_is_tls: bool = False,
+    allow_insecure_tcp_auth: bool = False,
 ) -> None:
     """Procesa un mensaje de un cliente y devuelve una confirmación."""
     try:
@@ -102,10 +115,21 @@ def handle_connection(
         except json.JSONDecodeError:
             request = None
         if isinstance(request, dict) and "operation" in request:
+            if not transport_is_tls and not allow_insecure_tcp_auth:
+                _record_transport_rejection(audit_logger, "tcp_authentication_not_allowed")
+                _send_protected_response(connection, {"result": "denied", "reason": "canal_inseguro"})
+                return
             _handle_protected_request(connection, request, controller, audit_logger, protected_error)
         else:
             # Compatibilidad deliberada con el eco TCP de la etapa 1.
             connection.sendall(f"RECIBIDO: {message}".encode("utf-8"))
+    except TimeoutError:
+        LOGGER.warning("Tiempo de espera de conexión desde %s:%s", *address)
+        _record_transport_rejection(audit_logger, "connection_timeout")
+        try:
+            connection.sendall(b"ERROR: tiempo de espera de conexion")
+        except OSError:
+            pass
     except UnicodeDecodeError:
         LOGGER.warning("Datos no UTF-8 rechazados desde %s:%s", *address)
         connection.sendall(b"ERROR: el mensaje debe usar UTF-8")
@@ -123,6 +147,8 @@ def serve(
     protected_error: str | None = None,
     ipsec_simulator: IPSecSimulator | None = None,
     ipsec_required: bool = False,
+    connection_timeout_seconds: int = 10,
+    allow_insecure_tcp_auth: bool = False,
 ) -> None:
     """Escucha conexiones TCP hasta que se interrumpa el proceso."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
@@ -135,7 +161,11 @@ def serve(
             try:
                 connection, address = server.accept()
                 LOGGER.info("Conexión aceptada desde %s:%s", *address)
-                handle_connection(connection, address, controller, audit_logger, protected_error, ipsec_simulator, ipsec_required)
+                connection.settimeout(connection_timeout_seconds)
+                handle_connection(
+                    connection, address, controller, audit_logger, protected_error, ipsec_simulator, ipsec_required,
+                    transport_is_tls=False, allow_insecure_tcp_auth=allow_insecure_tcp_auth,
+                )
             except OSError as error:
                 LOGGER.error("Error al aceptar una conexión: %s", error)
 
@@ -148,6 +178,27 @@ def create_server_tls_context(config: TLSServerConfig) -> ssl.SSLContext:
     return context
 
 
+def _wrap_tls_connection(
+    context: ssl.SSLContext,
+    connection: socket.socket,
+    address: tuple[str, int],
+    handshake_timeout_seconds: int,
+    audit_logger: AuditLogger | None,
+) -> ssl.SSLSocket | None:
+    """Limita el handshake TLS y rechaza fallos sin registrar datos del cliente."""
+    connection.settimeout(handshake_timeout_seconds)
+    try:
+        return context.wrap_socket(connection, server_side=True)
+    except TimeoutError:
+        LOGGER.warning("Tiempo de espera durante handshake TLS desde %s:%s", *address)
+        _record_transport_rejection(audit_logger, "tls_handshake_timeout")
+    except ssl.SSLError as error:
+        LOGGER.warning("Negociación TLS rechazada para %s:%s: %s", *address, error)
+        _record_transport_rejection(audit_logger, "tls_handshake_rejected")
+    connection.close()
+    return None
+
+
 def serve_tls(
     network_config: TCPConfig,
     tls_config: TLSServerConfig,
@@ -156,6 +207,8 @@ def serve_tls(
     protected_error: str | None = None,
     ipsec_simulator: IPSecSimulator | None = None,
     ipsec_required: bool = False,
+    connection_timeout_seconds: int = 10,
+    handshake_timeout_seconds: int = 10,
 ) -> None:
     """Escucha conexiones TLS y procesa el mismo protocolo de mensajes de TCP."""
     context = create_server_tls_context(tls_config)
@@ -168,13 +221,16 @@ def serve_tls(
         while True:
             connection, address = server.accept()
             LOGGER.info("Conexión TCP aceptada desde %s:%s; iniciando TLS", *address)
-            try:
-                secure_connection = context.wrap_socket(connection, server_side=True)
-            except ssl.SSLError as error:
-                LOGGER.warning("Negociación TLS rechazada para %s:%s: %s", *address, error)
-                connection.close()
+            secure_connection = _wrap_tls_connection(
+                context, connection, address, handshake_timeout_seconds, audit_logger,
+            )
+            if secure_connection is None:
                 continue
-            handle_connection(secure_connection, address, controller, audit_logger, protected_error, ipsec_simulator, ipsec_required)
+            secure_connection.settimeout(connection_timeout_seconds)
+            handle_connection(
+                secure_connection, address, controller, audit_logger, protected_error, ipsec_simulator, ipsec_required,
+                transport_is_tls=True,
+            )
 
 
 def load_access_control() -> tuple[AccessController | None, str | None]:
@@ -214,6 +270,7 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     try:
         network_config = load_tcp_config()
+        transport_security = load_transport_security_config()
         controller, protected_error = load_access_control()
         audit_logger, audit_error = load_audit_logger()
         if protected_error is None and audit_error is not None:
@@ -222,9 +279,16 @@ def main() -> None:
         if ipsec_required and audit_logger is None:
             raise ValueError("La simulación IPSec requiere AUDIT_LOG_FILE disponible; el servidor no se iniciará.")
         if load_communication_mode() == "tls":
-            serve_tls(network_config, load_tls_server_config(), controller, audit_logger, protected_error, ipsec_simulator, ipsec_required)
+            serve_tls(
+                network_config, load_tls_server_config(), controller, audit_logger, protected_error,
+                ipsec_simulator, ipsec_required, transport_security.connection_timeout_seconds,
+                transport_security.tls_handshake_timeout_seconds,
+            )
         else:
-            serve(network_config, controller, audit_logger, protected_error, ipsec_simulator, ipsec_required)
+            serve(
+                network_config, controller, audit_logger, protected_error, ipsec_simulator, ipsec_required,
+                transport_security.connection_timeout_seconds, transport_security.allow_insecure_tcp_auth,
+            )
     except ValueError as error:
         LOGGER.error("Configuración inválida: %s", error)
     except (OSError, ssl.SSLError) as error:

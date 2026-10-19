@@ -65,6 +65,9 @@ tests/
 | `IPSEC_SIM_REPLAY_WINDOW` | `64` | Ventana anti-replay, entre 1 y 1024. |
 | `IPSEC_SIM_MAX_MESSAGE_BYTES` | `2048` | Máximo de carga UTF-8 protegida. |
 | `IPSEC_SIM_SEQUENCE_START` | `1` | Primera secuencia del emisor para la asociación actual. |
+| `ALLOW_INSECURE_TCP_AUTH` | `0` | Solo laboratorio: permite operaciones con contraseña por TCP sin cifrar. Nunca active en redes reales. |
+| `CONNECTION_TIMEOUT_SECONDS` | `10` | Máximo, entre 1 y 60 segundos, para que una conexión aceptada envíe/procese su mensaje. |
+| `TLS_HANDSHAKE_TIMEOUT_SECONDS` | `10` | Máximo, entre 1 y 60 segundos, para completar un handshake TLS. |
 
 TLS exige CA explícita, validación del certificado, validación de hostname y TLS 1.2 o superior. No existe un modo para desactivar estas comprobaciones.
 
@@ -215,7 +218,13 @@ python -m src.comunicaciones_seguras.tcp_client "Mensaje de prueba"
 
 El cliente debe mostrar `RECIBIDO: Mensaje de prueba`. Para detener el servidor, presione `Ctrl+C`.
 
-Para ejecutar operaciones autenticadas sobre TCP (solo para comparar el riesgo de canal sin cifrar), configure primero las rutas de autenticación en la terminal del servidor y del cliente. Es preferible TLS porque la contraseña viaja como parte de la solicitud de aplicación.
+Las operaciones autenticadas se rechazan por defecto sobre TCP sin cifrar. El eco TCP académico permanece disponible porque no procesa credenciales ni operaciones protegidas. Solo para un laboratorio aislado puede habilitar explícitamente el escenario inseguro **en servidor y cliente**; TLS sigue siendo el modo requerido para cualquier uso no académico:
+
+```powershell
+$env:ALLOW_INSECURE_TCP_AUTH = "1"
+```
+
+Para comparar ese riesgo de laboratorio, configure primero las rutas de autenticación en la terminal del servidor y del cliente. La contraseña viaja como parte de la solicitud de aplicación y puede ser observada en la red.
 
 ```powershell
 $auth = Join-Path $env:USERPROFILE ".infraestructura-comunicaciones-seguras\auth"

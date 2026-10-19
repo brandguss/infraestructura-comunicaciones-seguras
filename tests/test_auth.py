@@ -48,9 +48,9 @@ class AccessControlTests(unittest.TestCase):
             target=handle_connection,
             args=(server, ("local", 0)),
             kwargs=(
-                {"controller": self.controller, "audit_logger": self.audit_logger}
+                {"controller": self.controller, "audit_logger": self.audit_logger, "transport_is_tls": True}
                 if configured
-                else {"protected_error": "archivo ausente"}
+                else {"protected_error": "archivo ausente", "transport_is_tls": True}
             ),
         )
         thread.start()
@@ -85,6 +85,35 @@ class AccessControlTests(unittest.TestCase):
     def test_missing_configuration_fails_closed(self) -> None:
         response = self._request("reader", self.passwords["reader"], "status", configured=False)
         self.assertEqual(response, {"result": "denied", "reason": "servicio_no_disponible"})
+
+    def test_tcp_rejects_protected_operation_without_laboratory_opt_in(self) -> None:
+        response = self._request("reader", self.passwords["reader"], "status", configured=True)
+        # El helper representa TLS; la comprobación TCP se ejercita directamente a continuación.
+        client, server = socket.socketpair()
+        request = json.dumps({"username": "reader", "password": self.passwords["reader"], "operation": "status"}).encode("utf-8")
+        thread = threading.Thread(target=handle_connection, args=(server, ("local", 0)), kwargs={"controller": self.controller, "audit_logger": self.audit_logger})
+        thread.start()
+        client.sendall(request)
+        rejected = json.loads(client.recv(4096).decode("utf-8"))
+        client.close()
+        thread.join(timeout=2)
+        self.assertEqual(rejected, {"result": "denied", "reason": "canal_inseguro"})
+        self.assertEqual(response["result"], "ok")
+
+    def test_tcp_laboratory_opt_in_allows_protected_operation(self) -> None:
+        client, server = socket.socketpair()
+        request = json.dumps({"username": "reader", "password": self.passwords["reader"], "operation": "status"}).encode("utf-8")
+        thread = threading.Thread(
+            target=handle_connection,
+            args=(server, ("local", 0)),
+            kwargs={"controller": self.controller, "audit_logger": self.audit_logger, "allow_insecure_tcp_auth": True},
+        )
+        thread.start()
+        client.sendall(request)
+        response = json.loads(client.recv(4096).decode("utf-8"))
+        client.close()
+        thread.join(timeout=2)
+        self.assertEqual(response["result"], "ok")
 
     def test_audit_log_is_structured_and_redacts_secrets(self) -> None:
         self._request("reader", self.passwords["reader"], "status")
