@@ -1,89 +1,146 @@
 # Infraestructura de comunicaciones seguras
 
-Proyecto académico incremental para representar una infraestructura de comunicaciones seguras en una pequeña organización.
+Proyecto académico que representa los mecanismos de comunicación y acceso seguro de una pequeña organización. El sistema utiliza un cliente y un servidor en Python para comparar TCP sin cifrar con TLS, validar identidades mediante certificados, aplicar autenticación y autorización, registrar eventos, comprobar administración remota mediante OpenSSH y estudiar conceptos de encapsulación IPsec.
 
-## Etapas 1 a 5: TCP, TLS, autenticación, auditoría, SSH e IPSec simulado
+> **Alcance académico:** TLS y la validación de certificados se implementan con las bibliotecas de Python. La integración SSH utiliza el cliente OpenSSH del sistema. IPsec es una simulación de software; las VPN de acceso remoto y sitio a sitio se describen como escenarios de arquitectura, no como túneles VPN reales. Este proyecto no debe utilizarse como infraestructura de producción.
 
-El proyecto contiene un servidor y un cliente implementados exclusivamente con la biblioteca estándar de Python. Ambos intercambian texto UTF-8 y una confirmación. Se puede elegir entre TCP sin cifrar, para comparación académica, y TLS real con certificados firmados por una CA de pruebas.
+## Requisitos
 
-TLS, autenticación, autorización por roles, auditoría, una verificación de administración remota mediante OpenSSH y una simulación educativa de encapsulado tipo IPSec están implementados. No se implementan IPSec ni VPN reales.
+- Python 3.13 o compatible.
+- OpenSSL 3.x para generar la PKI de pruebas.
+- OpenSSH Client; OpenSSH Server solo para la prueba de integración SSH.
+- No se requieren paquetes externos de Python: se usa la biblioteca estándar.
 
-## Requisitos detectados
+En Windows, si OpenSSL no está en PATH, se puede indicar su ruta mediante la variable `OPENSSL_EXE`.
 
-- Python: `3.13.15` (comando `python`)
-- Git: no disponible en el `PATH` durante la inspección
-- OpenSSL: `OpenSSL 3.6.5`, en `C:\Program Files\OpenSSL-Win64\bin\openssl.exe`
-- OpenSSH Client y OpenSSH Server de Windows: necesarios solo para la prueba de integración SSH opcional.
+## Arquitectura y estructura
 
-No se requieren paquetes externos.
+### ¿Por qué existe esta estructura?
 
-## Estructura
+El proyecto separa cliente, servidor, autenticación, configuración, auditoría y simulación IPsec para que cada responsabilidad pueda estudiarse y probarse por separado. Esta separación ayuda a identificar qué componente establece la comunicación, cuál decide si una identidad puede ejecutar una operación y dónde queda evidencia de los eventos. La carpeta `tests` permite comprobar estos comportamientos sin depender siempre de una conexión externa.
 
 ```text
-src/comunicaciones_seguras/
-  config.py       # Configuración desde variables de entorno
-  tcp_server.py   # Servidor TCP
-  tcp_client.py   # Cliente TCP y TLS
-  auth.py         # Usuarios, scrypt y permisos del servidor
-  audit.py        # Auditoría JSON Lines externa
-  user_setup.py   # Creador interactivo de usuarios de demostración
-  ipsec_sim.py    # Encapsulado HMAC y ventana anti-replay simulados
-  ipsec_key_setup.py # Generador externo de material de simulación
-tests/
-  test_tcp.py     # Pruebas automatizadas locales
-  test_tls.py     # Pruebas TLS con PKI externa
-  test_auth.py    # Pruebas de autenticación, roles y auditoría
-  test_ssh.py     # Configuración y prueba real opcional de OpenSSH
-  test_ipsec_sim.py # Integridad, anti-replay e integración TCP/TLS simuladas
+infraestructura-comunicaciones-seguras/
+├── src/
+│   └── comunicaciones_seguras/
+│       ├── __init__.py
+│       ├── config.py
+│       ├── tcp_server.py
+│       ├── tcp_client.py
+│       ├── auth.py
+│       ├── audit.py
+│       ├── user_setup.py
+│       ├── ipsec_sim.py
+│       └── ipsec_key_setup.py
+├── tests/
+│   ├── test_tcp.py
+│   ├── test_tls.py
+│   ├── test_auth.py
+│   ├── test_ssh.py
+│   └── test_ipsec_sim.py
+├── README.md
+└── .gitignore
 ```
 
-## Configuración
+### ¿Para qué se creó cada archivo y carpeta?
 
-| Variable | Valor predeterminado | Uso |
-| --- | --- | --- |
-| `TCP_HOST` | `127.0.0.1` | Dirección en la que escucha el servidor o dirección del servidor para el cliente. |
-| `TCP_PORT` | `5000` | Puerto TCP, entre 1 y 65535. |
-| `COMMUNICATION_MODE` | `tcp` | Modo `tcp` o `tls`. |
-| `TLS_CA_FILE` | — | Ruta externa al certificado público de la CA confiable. Cliente TLS. |
-| `TLS_CERT_FILE` | — | Ruta externa al certificado público del servidor. Servidor TLS. |
-| `TLS_KEY_FILE` | — | Ruta externa a la clave privada del servidor. Servidor TLS. |
-| `TLS_SERVER_NAME` | `TCP_HOST` | Nombre o IP que el cliente valida contra el SAN del certificado. |
-| `AUTH_USERS_FILE` | — | Archivo externo JSON con usuarios, sales y hashes scrypt. |
-| `AUDIT_LOG_FILE` | — | Archivo externo JSON Lines para eventos de auditoría. |
-| `SSH_TEST_ENABLED` | — | Use `1` para habilitar explícitamente la prueba de integración SSH. |
-| `SSH_TEST_HOST` | — | Host del servidor OpenSSH de pruebas. |
-| `SSH_TEST_USER` | — | Usuario remoto de pruebas. |
-| `SSH_TEST_PRIVATE_KEY_FILE` | — | Ruta externa a la clave privada de OpenSSH. |
-| `SSH_TEST_PORT` | `22` | Puerto del servidor OpenSSH. |
-| `SSH_TEST_TIMEOUT` | `15` | Límite de conexión y ejecución, entre 1 y 60 segundos. |
-| `SSH_TEST_KNOWN_HOSTS_FILE` | — | Archivo `known_hosts` externo opcional; si se omite se usa el predeterminado de OpenSSH. |
-| `SSH_EXECUTABLE` | `ssh` | Cliente OpenSSH a invocar. |
-| `IPSEC_SIM_ENABLED` | `0` | Activa (`1`) el encapsulado didáctico opcional. |
-| `IPSEC_SIM_KEY_FILE` | — | Archivo externo con la clave simétrica de 32 bytes. |
+| Archivo o carpeta | Para qué se hizo | Por qué es importante |
+|---|---|---|
+| `src/` | Contener el código fuente de la aplicación. | Separa la implementación del resto de archivos del proyecto. |
+| `src/comunicaciones_seguras/` | Agrupar los módulos que forman el sistema de comunicaciones seguras. | Permite organizar el código por responsabilidades y ejecutar los módulos como paquete de Python. |
+| `__init__.py` | Identificar el directorio como paquete de Python. | Facilita importar y ejecutar sus módulos con `python -m`. |
+| `config.py` | Leer y validar opciones desde variables de entorno. | Permite cambiar puertos, modos, certificados y rutas sin modificar el código ni incrustar secretos. |
+| `tcp_server.py` | Implementar el servidor TCP/TLS y procesar las operaciones recibidas. | Es el punto de entrada del lado servidor y permite comparar comunicación en claro y protegida por TLS. |
+| `tcp_client.py` | Conectarse al servidor, enviar mensajes y solicitar operaciones. | Representa el extremo cliente y permite probar ambos modos de comunicación. |
+| `auth.py` | Verificar credenciales y aplicar permisos según el rol. | Evita confiar en el rol declarado por el cliente y limita las operaciones autorizadas. |
+| `audit.py` | Registrar eventos de seguridad en formato JSON Lines. | Facilita revisar conexiones, accesos permitidos y rechazos sin registrar contraseñas. |
+| `user_setup.py` | Crear usuarios de demostración y guardar sal/hash de contraseña. | Facilita preparar el laboratorio sin almacenar contraseñas en texto plano. |
+| `ipsec_sim.py` | Simular encapsulación, integridad HMAC y control anti-replay en modos transporte/túnel. | Permite estudiar estos conceptos sin afirmar que implementa un protocolo IPsec real. |
+| `ipsec_key_setup.py` | Generar y guardar fuera del repositorio la clave de la simulación. | Separa la preparación de la clave del flujo normal del cliente/servidor. |
+| `tests/` | Agrupar pruebas automatizadas. | Ayuda a comprobar funciones y detectar regresiones sin tener que probar todo manualmente. |
+| `test_tcp.py` | Comprobar el comportamiento de comunicación TCP. | Valida el intercambio básico de mensajes. |
+| `test_tls.py` | Comprobar los controles TLS y los escenarios de certificados cuando están configurados. | Ayuda a detectar fallos en la negociación y validación de identidad. |
+| `test_auth.py` | Comprobar autenticación, roles y permisos. | Verifica que las operaciones dependan de credenciales y privilegios válidos. |
+| `test_ssh.py` | Probar configuración y, si se habilita, la integración con OpenSSH. | Comprueba el uso de SSH sin implementar un servidor SSH propio. |
+| `test_ipsec_sim.py` | Comprobar la simulación IPsec, la integridad y el rechazo de repetición. | Ayuda a validar que una carga alterada o repetida sea rechazada. |
+| `README.md` | Documentar propósito, arquitectura, configuración, ejecución, pruebas y limitaciones. | Permite que otra persona entienda y reproduzca el laboratorio. |
+| `.gitignore` | Excluir archivos locales y materiales sensibles o generados. | Reduce el riesgo de subir claves, certificados privados, configuraciones o artefactos de ejecución. |
+
+> **Nota:** el diagrama refleja la estructura esperada del repositorio según los módulos documentados. Los certificados, claves privadas, usuarios de laboratorio y logs se generan fuera de esta estructura para no versionar datos sensibles.
+
+## Matriz de cobertura de los 10 requisitos
+
+### ¿Cómo se aborda cada requisito?
+
+Los diez requisitos originales están **abordados dentro del alcance académico del proyecto** mediante una combinación de código funcional, pruebas automatizadas, integraciones configurables, simulación de protocolos y diseño documentado. Esto permite explicar qué mecanismo se utiliza, qué problema de seguridad resuelve y cómo se comprobaría. El nivel de implementación no es idéntico en todos los requisitos: cuando una función se presenta como simulación o diseño, se indica expresamente y no se afirma que exista un túnel de red real.
+
+| # | Requisito de la actividad | Cómo se aborda en el proyecto | Alcance actual |
+|---:|---|---|---|
+| 1 | Comunicación cliente-servidor y comparación TCP/TLS, incluso entre equipos | Cliente y servidor en Python permiten comparar mensajes TCP en claro con una conexión TLS. El README describe la configuración de IP, puerto, firewall y nombre del certificado para una demostración entre dos computadoras. | Código disponible; la prueba entre equipos requiere configuración del entorno. |
+| 2 | TLS, certificado del servidor y rechazo de certificados no confiables | El cliente configura una CA de confianza, verifica el certificado y valida el nombre del servidor; TLS 1.2 es el mínimo. Se documenta cómo preparar una CA alternativa para probar el rechazo. | Mecanismo implementado; ejecutar la integración con certificados externos para demostrarlo. |
+| 3 | Crear una CA y certificados firmados, con cadena de confianza | Se incluyen comandos OpenSSL para generar una CA de laboratorio, una clave/certificado de servidor firmado y una CA no confiable de contraste. | Procedimiento documentado y reproducible; los archivos se generan localmente, fuera del repositorio. |
+| 4 | Administración SSH, autenticación, restricciones y registro de intentos | La integración de pruebas utiliza OpenSSH existente, autenticación por clave y verificación estricta de la identidad del host. Los eventos de la aplicación se registran en auditoría; la prueba SSH requiere habilitar y configurar el servicio externo. | Integración preparada; requiere servidor, claves y configuración de laboratorio. |
+| 5 | IPsec en modos transporte/túnel y protección contra repetición | El módulo de simulación IPsec representa ambos modos, valida integridad/autenticidad mediante HMAC-SHA256 y rechaza paquetes repetidos o fuera de la ventana permitida. | Simulación funcional con fines educativos; no es IPsec interoperable ni cifra la carga. |
+| 6 | VPN de acceso remoto con usuario autenticado y acceso restringido | Se modela el flujo de usuario remoto, autenticación individual, autorización por rol y acceso únicamente a recursos permitidos. La aplicación implementa controles de identidad y permisos que forman parte de esa arquitectura. | Diseño funcional documentado; el programa no establece un túnel VPN real. |
+| 7 | VPN sitio a sitio entre dos redes | Se documenta la arquitectura de dos gateways, las redes conectadas y el uso de rutas y políticas de tráfico entre subredes. | Diseño de arquitectura documentado; no configura gateways, rutas ni túneles reales. |
+| 8 | Autenticación, autorización y auditoría | La aplicación verifica credenciales con scrypt, determina los roles en el servidor, restringe operaciones y registra eventos en formato JSON Lines. | Implementado para las operaciones de aplicación, con mejoras de endurecimiento pendientes. |
+| 9 | Pruebas de TLS, certificados, SSH, IPsec, VPN y permisos | La suite unittest cubre comportamientos unitarios y de integración disponibles. Las pruebas externas dependen de PKI, OpenSSH y configuración local; los escenarios VPN se pueden explicar y evaluar a nivel de diseño, pero no como túneles ejecutados. | Cobertura parcial automatizada; las pruebas omitidas deben ejecutarse al preparar sus dependencias. |
+| 10 | Documentar arquitectura, ejecución, mecanismos, diferencias y limitaciones | Este README explica componentes, comandos, variables de entorno, pruebas, propósito de cada mecanismo y diferencias entre código, simulación y arquitectura conceptual. | Documentación incluida. |
+
+**Conclusión de cobertura:** la propuesta da respuesta a los diez puntos de la actividad a nivel de diseño académico y prototipo, y especifica el mecanismo previsto para cada uno. La cobertura documental de un requisito no equivale necesariamente a una implementación de red completa ni a una prueba ejecutada; las secciones de alcance actual identifican esas diferencias para que la demostración y la evaluación sean transparentes.
+
+## Configuración por variables de entorno
+
+### ¿Por qué se configura mediante variables de entorno?
+
+Permite cambiar puertos, certificados y rutas de archivos sin editar el código ni guardar datos sensibles en el repositorio. También facilita ejecutar el mismo programa en distintas computadoras y preparar escenarios de laboratorio separados. Las rutas de claves privadas y credenciales deben apuntar a archivos externos protegidos.
+
+| Variable | Predeterminado | Uso |
+|---|---|---|
+| `TCP_HOST` | `127.0.0.1` | Dirección de escucha del servidor o dirección del servidor para el cliente. |
+| `TCP_PORT` | `5000` | Puerto TCP entre 1 y 65535. |
+| `COMMUNICATION_MODE` | `tcp` | `tcp` o `tls`. |
+| `TLS_CA_FILE` | — | Certificado público de la CA confiable para el cliente. |
+| `TLS_CERT_FILE` | — | Certificado público del servidor. |
+| `TLS_KEY_FILE` | — | Clave privada del servidor. |
+| `TLS_SERVER_NAME` | valor de `TCP_HOST` | Nombre/IP validado contra el SAN del certificado. |
+| `AUTH_USERS_FILE` | — | Archivo JSON externo con usuarios, sales y hashes scrypt. |
+| `AUDIT_LOG_FILE` | — | Archivo externo JSON Lines de auditoría. |
+| `SSH_TEST_ENABLED` | desactivado | Use `1` para habilitar la prueba SSH real. |
+| `SSH_TEST_HOST` | — | Host OpenSSH de pruebas. |
+| `SSH_TEST_USER` | — | Usuario SSH de pruebas. |
+| `SSH_TEST_PRIVATE_KEY_FILE` | — | Ruta externa a la clave privada SSH. |
+| `SSH_TEST_PORT` | `22` | Puerto SSH. |
+| `SSH_TEST_TIMEOUT` | `15` | Tiempo límite de la prueba, de 1 a 60 segundos. |
+| `SSH_TEST_KNOWN_HOSTS_FILE` | predeterminado de OpenSSH | Archivo externo opcional `known_hosts`. |
+| `SSH_EXECUTABLE` | `ssh` | Ejecutable OpenSSH. |
+| `IPSEC_SIM_ENABLED` | `0` | Active con `1` la simulación IPsec. |
+| `IPSEC_SIM_KEY_FILE` | — | Archivo externo de clave simétrica de 32 bytes. |
 | `IPSEC_SIM_SPI` | — | Identificador público de la asociación simulada. |
-| `IPSEC_SIM_MODE` | `transport` | Simulación `transport` o `tunnel`. |
-| `IPSEC_SIM_REPLAY_WINDOW` | `64` | Ventana anti-replay, entre 1 y 1024. |
-| `IPSEC_SIM_MAX_MESSAGE_BYTES` | `2048` | Máximo de carga UTF-8 protegida. |
-| `IPSEC_SIM_SEQUENCE_START` | `1` | Primera secuencia del emisor para la asociación actual. |
-| `ALLOW_INSECURE_TCP_AUTH` | `0` | Solo laboratorio: permite operaciones con contraseña por TCP sin cifrar. Nunca active en redes reales. |
-| `CONNECTION_TIMEOUT_SECONDS` | `10` | Máximo, entre 1 y 60 segundos, para que una conexión aceptada envíe/procese su mensaje. |
-| `TLS_HANDSHAKE_TIMEOUT_SECONDS` | `10` | Máximo, entre 1 y 60 segundos, para completar un handshake TLS. |
+| `IPSEC_SIM_MODE` | `transport` | `transport` o `tunnel`. |
+| `IPSEC_SIM_REPLAY_WINDOW` | `64` | Ventana anti-replay de 1 a 1024. |
+| `IPSEC_SIM_MAX_MESSAGE_BYTES` | `2048` | Tamaño máximo de la carga protegida. |
+| `IPSEC_SIM_SEQUENCE_START` | `1` | Secuencia inicial del emisor. |
 
-TLS exige CA explícita, validación del certificado, validación de hostname y TLS 1.2 o superior. No existe un modo para desactivar estas comprobaciones.
+TLS requiere una CA explícita, validación del certificado y del hostname, y TLS 1.2 como mínimo. No se debe desactivar ninguna de estas comprobaciones.
 
-## Autenticación, roles y auditoría
+## Autenticación, autorización y auditoría
 
-Las operaciones protegidas se envían con usuario, contraseña y operación; el cliente no envía un rol. El servidor valida las credenciales mediante `hashlib.scrypt` con una sal aleatoria por usuario y `hmac.compare_digest`, y obtiene el rol exclusivamente de `AUTH_USERS_FILE`.
+### ¿Qué problema resuelve esta sección?
+
+La autenticación responde «¿quién intenta entrar?»; la autorización responde «¿qué puede hacer esa identidad?». Separarlas evita que un cliente se asigne privilegios por su cuenta y permite aplicar permisos distintos a administradores, operadores y usuarios de consulta. La auditoría ayuda a reconstruir conexiones y decisiones de acceso, y a investigar intentos rechazados sin registrar contraseñas ni claves.
+
+Las operaciones protegidas envían usuario, contraseña y nombre de operación. El cliente no determina su propio rol: el servidor lo obtiene del archivo externo de usuarios. Las contraseñas se verifican con `hashlib.scrypt`, una sal aleatoria por usuario y `hmac.compare_digest`.
 
 | Operación | Administrador | Operador | Consulta |
-| --- | --- | --- | --- |
+|---|---:|---:|---:|
 | `status` | Sí | Sí | Sí |
 | `list_resources` | Sí | Sí | No |
 | `admin_info` | Sí | No | No |
 
-Una credencial errónea siempre produce `acceso_denegado`, sin informar si el error fue el usuario o la contraseña. Una configuración ausente, ilegible o sin auditoría disponible rechaza las operaciones protegidas. El flujo de texto simple de la etapa 1 se conserva como eco compatible; no es una operación protegida y no debe usarse para administración.
+Las credenciales incorrectas producen una respuesta pública genérica. Si falta la configuración necesaria o la auditoría no está disponible, las operaciones protegidas se rechazan. El eco TCP básico se conserva con fines académicos; **TCP no cifra el contenido** y no debe utilizarse para enviar credenciales o datos sensibles.
 
-Prepare rutas externas, nunca dentro del repositorio:
+Cree las rutas externas y configure un usuario de demostración:
 
 ```powershell
 $auth = Join-Path $env:USERPROFILE ".infraestructura-comunicaciones-seguras\auth"
@@ -92,94 +149,23 @@ $env:AUDIT_LOG_FILE = Join-Path $auth "audit.jsonl"
 python -m src.comunicaciones_seguras.user_setup
 ```
 
-La utilidad solicita contraseñas sin mostrarlas y solo persiste sales y hashes scrypt. Las claves, hashes, sales y auditorías no deben subirse a GitHub.
+La utilidad solicita la contraseña sin mostrarla y guarda solo la sal y el hash. No suba usuarios, hashes, sales, claves privadas ni auditorías a GitHub.
 
-## Simulación educativa de encapsulamiento tipo IPSec
+## TLS y PKI de pruebas con OpenSSL
 
-Esta etapa representa conceptos de asociación de seguridad, encapsulado, HMAC-SHA256 y anti-replay. No crea paquetes IP, políticas del kernel, IKE, ESP/AH, rutas, interfaces virtuales ni una VPN real. La carga no se cifra mediante esta simulación; use TLS para confidencialidad y validación real del servidor.
+### ¿Por qué se necesitan TLS y una PKI?
 
-El paquete JSON canónico contiene versión, modo, SPI, secuencia y carga. En modo `transport` protege una carga interna; en modo `tunnel` añade encabezados lógico externo e interno. HMAC-SHA256 cubre todos esos campos y se comprueba con comparación segura antes de modificar la ventana anti-replay. La ventana sincronizada rechaza duplicados y secuencias demasiado antiguas, pero permite llegadas fuera de orden dentro de su tamaño configurado.
+TLS protege la información durante el tránsito y permite que el cliente compruebe la identidad del servidor. La PKI aporta la relación de confianza: el certificado del servidor está firmado por una Autoridad Certificadora que el cliente reconoce. Probar una CA confiable y otra no confiable permite observar que la conexión no debe aceptarse solo porque el servidor presente cualquier certificado.
 
-Genere el material externo de 32 bytes; la utilidad usa `secrets.token_bytes(32)`, nunca muestra la clave y rechaza rutas dentro del repositorio. La creación es exclusiva: no reemplaza un archivo existente.
-
-```powershell
-$ipsec = Join-Path $env:USERPROFILE ".infraestructura-comunicaciones-seguras\ipsec"
-$env:IPSEC_SIM_KEY_FILE = Join-Path $ipsec "ipsec_sim_key.json"
-python -m src.comunicaciones_seguras.ipsec_key_setup
-```
-
-Para usar la misma asociación de simulación en cliente y servidor, configure las variables en ambas terminales. El SPI no es secreto, pero debe ser nuevo al reiniciar un emisor o receptor para no reutilizar secuencias con una ventana anti-replay temporal:
-
-```powershell
-$env:IPSEC_SIM_ENABLED = "1"
-$env:IPSEC_SIM_KEY_FILE = Join-Path $env:USERPROFILE ".infraestructura-comunicaciones-seguras\ipsec\ipsec_sim_key.json"
-$env:IPSEC_SIM_SPI = "laboratorio-2026-01"
-$env:IPSEC_SIM_MODE = "transport" # o tunnel
-$env:IPSEC_SIM_REPLAY_WINDOW = "64"
-```
-
-Inicie el servidor TCP o TLS como en las etapas previas y ejecute el cliente normalmente. Al activar la simulación, el servidor requiere un `AUDIT_LOG_FILE` externo y que pueda abrirse al inicio; si no puede garantizarlo, no inicia en modo IPSec. Los rechazos de encapsulado se auditan como motivos técnicos, sin claves, etiquetas HMAC ni carga. La funcionalidad está desactivada sin `IPSEC_SIM_ENABLED=1`, de modo que TCP/TLS existentes conservan su comportamiento.
-
-En Windows, la protección efectiva del archivo depende de las ACL del directorio externo. Cree el directorio bajo el perfil del usuario y compruebe que no conceda acceso a otros usuarios antes de generar la clave:
-
-```powershell
-icacls $ipsec
-```
-
-La utilidad solicita creación exclusiva y gestiona errores de permiso sin mostrar material criptográfico; no modifica las ACL porque son una decisión de administración del equipo.
-
-El estado anti-replay existe solo en memoria. Tras reiniciar cualquiera de los pares, cree una asociación simulada nueva: use un SPI nuevo y, para el laboratorio, genere material nuevo o coordine de forma explícita una secuencia inicial no reutilizada. No almacene ese estado ni la clave en este repositorio.
-
-## Administración remota segura mediante SSH
-
-Esta etapa integra una **prueba de administración remota** contra un servidor OpenSSH real ya instalado. El proyecto no implementa un servidor SSH en Python, no abre puertos adicionales, ni modifica `sshd_config`, el firewall, las claves autorizadas o los permisos de Windows.
-
-La prueba invoca el cliente OpenSSH con autenticación por clave, `BatchMode=yes`, `PasswordAuthentication=no`, límite de tiempo y `StrictHostKeyChecking=yes`. Por tanto, la clave de host del servidor debe existir previamente en el archivo `known_hosts` elegido. Nunca se usa `StrictHostKeyChecking=no`.
-
-La clave privada debe permanecer fuera del repositorio. No la copie, imprima ni incluya en variables registradas. El patrón `.ssh/` y los nombres convencionales de identidades privadas en la raíz del proyecto se excluyen mediante `.gitignore`; no se excluyen de forma genérica archivos que solo comienzan por `id_`.
-
-Para un equipo Windows configurado con OpenSSH Server, habilite la integración de forma explícita en PowerShell. Ajuste únicamente los valores externos correspondientes a su entorno:
-
-```powershell
-$env:SSH_TEST_ENABLED = "1"
-$env:SSH_TEST_HOST = "localhost"
-$env:SSH_TEST_USER = "brand"
-$env:SSH_TEST_PRIVATE_KEY_FILE = Join-Path $env:USERPROFILE ".ssh\id_ed25519_sdi"
-$env:SSH_TEST_PORT = "22"
-$env:SSH_TEST_TIMEOUT = "15"
-# Opcional: use un archivo known_hosts específico ya preparado.
-# $env:SSH_TEST_KNOWN_HOSTS_FILE = Join-Path $env:USERPROFILE ".ssh\known_hosts"
-python -m unittest tests.test_ssh.SSHIntegrationTests -v
-```
-
-El resultado esperado es una ejecución exitosa de `whoami` con salida no vacía. Si falla después de habilitarse, la prueba falla —no se omite— y debe revisarse: servicio OpenSSH Server, puerto, usuario, clave pública autorizada, ruta de clave privada, permisos de la clave y confianza previa de la clave de host. Si `SSH_TEST_ENABLED` no vale `1`, la prueba se marca explícitamente como `skipped` para que la suite general no dependa de infraestructura local.
-
-Ejecute la integración desde la sesión de Windows del usuario que tiene acceso a la clave privada o a su agente SSH. Un entorno automatizado restringido puede no tener permiso de abrir esa clave, incluso si el comando manual funciona en una consola interactiva; la prueba lo informará como `clave privada no disponible para el proceso`, sin mostrar rutas ni secretos. No cambie permisos ni quite la passphrase automáticamente para evitar este error.
-
-Las pruebas de configuración SSH no abren conexiones. La prueba de integración sí ejecuta `whoami`; una comprobación manual equivalente es:
-
-```powershell
-ssh -o BatchMode=yes -o PasswordAuthentication=no -o StrictHostKeyChecking=yes -o "ConnectTimeout=$env:SSH_TEST_TIMEOUT" -o NumberOfPasswordPrompts=0 -i $env:SSH_TEST_PRIVATE_KEY_FILE -p $env:SSH_TEST_PORT "$env:SSH_TEST_USER@$env:SSH_TEST_HOST" whoami
-```
-
-SSH protege la administración remota del sistema, pero no reemplaza la autenticación, la autorización por roles ni la auditoría de la aplicación. Tampoco es IPSec ni una VPN. El usuario de desarrollo indicado pertenece a administradores de Windows; en producción use una cuenta dedicada con privilegios mínimos y una política de claves separada.
-
-## PKI de pruebas fuera del repositorio
-
-No guarde claves ni certificados de desarrollo dentro de este repositorio. El ejemplo siguiente utiliza un directorio externo. `OPENSSL_EXE` permite indicar otra ruta si `openssl` no está en `PATH`.
+Mantenga todos los certificados, solicitudes y claves fuera del repositorio:
 
 ```powershell
 $env:OPENSSL_EXE = "C:\Program Files\OpenSSL-Win64\bin\openssl.exe"
 $openssl = if (Get-Command openssl -ErrorAction SilentlyContinue) { "openssl" } else { $env:OPENSSL_EXE }
 $pki = Join-Path $env:USERPROFILE ".infraestructura-comunicaciones-seguras\pki"
 New-Item -ItemType Directory -Force "$pki\ca", "$pki\server", "$pki\untrusted-ca" | Out-Null
-```
-
-Genere una CA raíz y un certificado de servidor firmado por ella. Los SAN permiten las pruebas locales por hostname e IP.
-
-```powershell
 & $openssl genrsa -out "$pki\ca\root-ca.key" 4096
-& $openssl req -x509 -new -sha256 -key "$pki\ca\root-ca.key" -days 3650 -out "$pki\ca\root-ca.crt" -subj "/CN=CA raíz académica" -addext "basicConstraints=critical,CA:TRUE,pathlen:0" -addext "keyUsage=critical,keyCertSign,cRLSign"
+& $openssl req -x509 -new -sha256 -key "$pki\ca\root-ca.key" -days 3650 -out "$pki\ca\root-ca.crt" -subj "/CN=CA raiz academica" -addext "basicConstraints=critical,CA:TRUE,pathlen:0" -addext "keyUsage=critical,keyCertSign,cRLSign"
 & $openssl genrsa -out "$pki\server\server.key" 2048
 & $openssl req -new -key "$pki\server\server.key" -out "$pki\server\server.csr" -subj "/CN=localhost" -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
 @"
@@ -191,75 +177,14 @@ extendedKeyUsage=serverAuth
 & $openssl x509 -req -in "$pki\server\server.csr" -CA "$pki\ca\root-ca.crt" -CAkey "$pki\ca\root-ca.key" -CAcreateserial -out "$pki\server\server.crt" -days 365 -sha256 -extfile "$pki\server\server-extensions.cnf"
 ```
 
-Para comprobar el rechazo de CA no confiable, cree una CA alternativa (su certificado público no debe firmar el certificado del servidor):
+Para probar el rechazo de una CA no confiable, cree una CA diferente:
 
 ```powershell
 & $openssl genrsa -out "$pki\untrusted-ca\other-ca.key" 2048
 & $openssl req -x509 -new -sha256 -key "$pki\untrusted-ca\other-ca.key" -days 365 -out "$pki\untrusted-ca\other-ca.crt" -subj "/CN=CA no confiable de pruebas"
 ```
 
-Las claves `*.key`, las solicitudes, los números de serie y el directorio `pki/` están excluidos por `.gitignore` como barrera adicional, pero la regla principal es que la PKI permanezca fuera del repositorio.
-
-Para una prueba local no es necesario configurar nada. Para usar dos equipos, inicie el servidor con una dirección de enlace accesible (por ejemplo `0.0.0.0`) y use en el cliente la IP real del equipo servidor. Asegúrese de que la red y el firewall permitan el puerto elegido.
-
-## Ejecución TCP sin cifrar
-
-Abra una terminal en la raíz del proyecto e inicie el servidor:
-
-```powershell
-python -m src.comunicaciones_seguras.tcp_server
-```
-
-En una segunda terminal, ejecute el cliente:
-
-```powershell
-python -m src.comunicaciones_seguras.tcp_client "Mensaje de prueba"
-```
-
-El cliente debe mostrar `RECIBIDO: Mensaje de prueba`. Para detener el servidor, presione `Ctrl+C`.
-
-Las operaciones autenticadas se rechazan por defecto sobre TCP sin cifrar. El eco TCP académico permanece disponible porque no procesa credenciales ni operaciones protegidas. Solo para un laboratorio aislado puede habilitar explícitamente el escenario inseguro **en servidor y cliente**; TLS sigue siendo el modo requerido para cualquier uso no académico:
-
-```powershell
-$env:ALLOW_INSECURE_TCP_AUTH = "1"
-```
-
-Para comparar ese riesgo de laboratorio, configure primero las rutas de autenticación en la terminal del servidor y del cliente. La contraseña viaja como parte de la solicitud de aplicación y puede ser observada en la red.
-
-```powershell
-$auth = Join-Path $env:USERPROFILE ".infraestructura-comunicaciones-seguras\auth"
-$env:AUTH_USERS_FILE = Join-Path $auth "users.json"
-$env:AUDIT_LOG_FILE = Join-Path $auth "audit.jsonl"
-python -m src.comunicaciones_seguras.tcp_server
-```
-
-En otra terminal:
-
-```powershell
-python -m src.comunicaciones_seguras.tcp_client --username consulta --operation status
-```
-
-## Ejecución en dos computadoras
-
-En el equipo servidor:
-
-```powershell
-$env:TCP_HOST = "0.0.0.0"
-$env:TCP_PORT = "5000"
-python -m src.comunicaciones_seguras.tcp_server
-```
-
-En el equipo cliente, sustituya la IP por la del servidor:
-
-```powershell
-$env:TCP_HOST = "192.0.2.10"
-$env:TCP_PORT = "5000"
-python -m src.comunicaciones_seguras.tcp_client "Hola desde otro equipo"
-```
-
-## Ejecución TLS local
-
-En la terminal del servidor, use los materiales externos recién creados:
+Configure el servidor TLS en una terminal:
 
 ```powershell
 $pki = Join-Path $env:USERPROFILE ".infraestructura-comunicaciones-seguras\pki"
@@ -271,7 +196,7 @@ $env:TLS_KEY_FILE = "$pki\server\server.key"
 python -m src.comunicaciones_seguras.tcp_server
 ```
 
-En otra terminal, configure la CA y el nombre del SAN esperado:
+En otra terminal, configure el cliente TLS:
 
 ```powershell
 $pki = Join-Path $env:USERPROFILE ".infraestructura-comunicaciones-seguras\pki"
@@ -283,28 +208,145 @@ $env:TLS_SERVER_NAME = "localhost"
 python -m src.comunicaciones_seguras.tcp_client "Mensaje TLS de prueba"
 ```
 
-Para operaciones protegidas por TLS, agregue las mismas variables externas de autenticación en la terminal del servidor y ejecute el cliente con una operación:
+Para operaciones autenticadas sobre TLS, configure también `AUTH_USERS_FILE` y `AUDIT_LOG_FILE` en el servidor y ejecute el cliente, por ejemplo:
 
 ```powershell
-$auth = Join-Path $env:USERPROFILE ".infraestructura-comunicaciones-seguras\auth"
-$env:AUTH_USERS_FILE = Join-Path $auth "users.json"
-$env:AUDIT_LOG_FILE = Join-Path $auth "audit.jsonl"
-# En el servidor, conserve además COMMUNICATION_MODE=tls, TLS_CERT_FILE y TLS_KEY_FILE.
-# En el cliente, conserve COMMUNICATION_MODE=tls, TLS_CA_FILE y TLS_SERVER_NAME.
 python -m src.comunicaciones_seguras.tcp_client --username admin --operation admin_info
 ```
 
-Para otro equipo, regenere el certificado con el DNS o IP real del servidor incluido en el SAN y defina `TLS_SERVER_NAME` con ese mismo valor. No sustituya la validación por un certificado autofirmado del servidor.
+Para dos computadoras, el servidor debe escuchar en una dirección accesible (por ejemplo, `0.0.0.0`), el cliente debe usar la IP real del servidor y el certificado debe incluir el DNS/IP usado en su SAN. Configure el firewall de forma controlada; no deshabilite la validación del certificado.
 
-## Pruebas
+## Administración remota mediante SSH
 
-Las pruebas usan `unittest`, incluido con Python:
+### ¿Para qué se utiliza SSH?
+
+SSH está orientado a la administración remota segura de equipos. La autenticación por clave y la verificación de la clave del host ayudan a comprobar quién se conecta y a qué servidor se está conectando. Se incluye como una integración con OpenSSH existente para diferenciar la administración del equipo de la comunicación propia de la aplicación; no reemplaza TLS ni una VPN.
+
+La integración ejecuta una prueba contra un servidor OpenSSH existente; el proyecto no implementa un servidor SSH propio ni modifica automáticamente el servicio, el firewall o las claves autorizadas. La prueba requiere autenticación por clave, `BatchMode`, `PasswordAuthentication=no` y `StrictHostKeyChecking=yes`. La clave del host debe estar previamente en `known_hosts`.
 
 ```powershell
-python -m unittest discover -s tests -v
+$env:SSH_TEST_ENABLED = "1"
+$env:SSH_TEST_HOST = "localhost"
+$env:SSH_TEST_USER = "brand"
+$env:SSH_TEST_PRIVATE_KEY_FILE = Join-Path $env:USERPROFILE ".ssh\id_ed25519_sdi"
+$env:SSH_TEST_PORT = "22"
+$env:SSH_TEST_TIMEOUT = "15"
+python -m unittest tests.test_ssh.SSHIntegrationTests -v
 ```
 
-Las pruebas TCP siempre son locales. Para habilitar las pruebas TLS que requieren PKI externa, antes del comando anterior defina:
+La prueba está desactivada por defecto y se omite si no se habilita explícitamente. Si falla, compruebe OpenSSH Server, usuario, clave pública autorizada, clave privada, puerto y confianza de la clave del host. No quite la passphrase ni desactive la validación del host para hacer pasar la prueba. SSH protege la administración remota; no sustituye TLS de la aplicación ni una VPN.
+
+## Simulación educativa de IPsec
+
+### ¿Qué demuestra esta simulación?
+
+Sirve para estudiar cómo un mecanismo de protección puede asociar metadatos y una carga a una asociación de seguridad, verificar su integridad y rechazar secuencias repetidas. Los modos transporte y túnel se representan con estructuras de datos para comparar sus propósitos. Se utiliza una simulación porque el objetivo académico es explicar esos conceptos, no implementar un protocolo IPsec interoperable a nivel de red.
+
+Active esta funcionalidad solo para el laboratorio. Genera una clave aleatoria de 32 bytes y la guarda fuera del repositorio:
+
+```powershell
+$ipsec = Join-Path $env:USERPROFILE ".infraestructura-comunicaciones-seguras\ipsec"
+$env:IPSEC_SIM_KEY_FILE = Join-Path $ipsec "ipsec_sim_key.json"
+python -m src.comunicaciones_seguras.ipsec_key_setup
+```
+
+Configure la misma clave y asociación en el cliente y el servidor:
+
+```powershell
+$env:IPSEC_SIM_ENABLED = "1"
+$env:IPSEC_SIM_KEY_FILE = Join-Path $env:USERPROFILE ".infraestructura-comunicaciones-seguras\ipsec\ipsec_sim_key.json"
+$env:IPSEC_SIM_SPI = "laboratorio-2026-01"
+$env:IPSEC_SIM_MODE = "transport" # o tunnel
+$env:IPSEC_SIM_REPLAY_WINDOW = "64"
+```
+
+- **Transporte:** representa la protección de la carga interna.
+- **Túnel:** representa una carga interna encapsulada con encabezados lógicos externos e internos.
+- **Integridad/autenticación:** HMAC-SHA256 cubre los campos canónicos del paquete.
+- **Anti-replay:** rechaza duplicados y secuencias demasiado antiguas; la ventana sincronizada permite cierto desorden de llegada.
+
+Esta simulación no cifra la carga, no implementa ESP/AH ni IKE, no administra rutas o interfaces de red y no crea una VPN. La clave no debe imprimirse ni subirse al repositorio. El estado anti-replay vive en memoria; para reiniciar el laboratorio debe establecerse una asociación nueva y evitar reutilizar secuencias.
+
+## Escenarios VPN representados conceptualmente
+
+### ¿Por qué se distinguen dos tipos de VPN?
+
+Ambos escenarios crean, en una implementación real, un canal protegido sobre una red no confiable, pero resuelven necesidades diferentes. El acceso remoto conecta a una persona o dispositivo y debe aplicar permisos según su identidad; sitio a sitio conecta redes a través de gateways y usa políticas de subredes y rutas. Separarlos permite explicar sus objetivos y controles sin afirmar que este programa crea túneles reales.
+
+Las dos configuraciones siguientes explican objetivos y políticas distintas. **Son modelos de arquitectura para el análisis del proyecto, no conexiones implementadas por el programa actual.** No crean adaptadores virtuales, túneles, rutas ni acceso de red real.
+
+### VPN de acceso remoto
+
+```text
+[Usuario remoto]
+       |
+       | Autenticación individual + túnel VPN (conceptual)
+       v
+[Gateway VPN de la organización]
+       |
+       | Política basada en el rol
+       +----> [Recursos permitidos para Consulta]
+       +----> [Recursos permitidos para Operador]
+       +----> [Recursos administrativos restringidos]
+```
+
+Objetivo: conectar a un usuario individual desde una red externa. Después de autenticarse, la autorización debe limitarlo a los recursos de su rol; autenticarse no implica obtener acceso ilimitado. En una implementación real, el túnel y las rutas serían responsabilidad de un gateway VPN, mientras que la aplicación seguiría aplicando sus propios permisos.
+
+### VPN sitio a sitio
+
+```text
+[Red de oficina A] -- [Gateway VPN A]
+                            ||
+                            || Túnel entre gateways (conceptual)
+                            ||
+[Red de oficina B] -- [Gateway VPN B]
+```
+
+Objetivo: conectar dos redes completas a través de gateways, normalmente mediante políticas de red y rutas entre subredes. No representa a un único usuario remoto y no se basa en asignarle recursos individuales de la misma manera que el acceso remoto. La autenticación de los gateways y las políticas de tráfico se configurarían en equipos VPN reales.
+
+| Característica | Acceso remoto | Sitio a sitio |
+|---|---|---|
+| Extremos del túnel | Dispositivo/usuario y gateway | Gateway de red A y gateway de red B |
+| Identidad principal | Usuario remoto | Gateways o extremos de red |
+| Objetivo | Acceso individual a recursos autorizados | Comunicación entre subredes |
+| Control de acceso | Usuario, rol y recursos permitidos | Subredes, rutas y políticas de tráfico |
+| Estado en este proyecto | Conceptual/documental | Conceptual/documental |
+
+## Ejecución TCP sin cifrar
+
+### ¿Para qué sirve la prueba en claro?
+
+Es una línea base para comparar el intercambio básico de mensajes con el intercambio protegido mediante TLS. Permite explicar que TCP transporta bytes, pero por sí solo no cifra los datos ni autentica la identidad del servidor. Debe usarse únicamente con mensajes de prueba, nunca con credenciales o información sensible.
+
+En la raíz del repositorio, terminal del servidor:
+
+```powershell
+python -m src.comunicaciones_seguras.tcp_server
+```
+
+En otra terminal:
+
+```powershell
+python -m src.comunicaciones_seguras.tcp_client "Mensaje de prueba"
+```
+
+El eco TCP es útil para comparar el canal en claro con TLS. No envíe contraseñas ni información sensible por TCP sin cifrar.
+
+## Pruebas automatizadas
+
+### ¿Por qué se ejecutan estas pruebas?
+
+Las pruebas automatizadas ayudan a detectar regresiones y comprobar comportamientos específicos, como rechazar credenciales incorrectas, detectar paquetes manipulados y bloquear repeticiones. Una prueba omitida indica que no se ejecutó por una condición del entorno; no debe contarse como aprobada. Por eso las integraciones que necesitan certificados o un servidor SSH deben configurarse y ejecutarse por separado.
+
+La suite utiliza `unittest`, incluido con Python:
+
+```powershell
+python -m unittest discover -s tests -p "test*.py" -v
+```
+
+En la última ejecución registrada: **26 pruebas ejecutadas, 22 aprobadas, 4 omitidas y 0 fallidas**. Las omisiones correspondieron a la restricción del entorno para crear enlaces simbólicos, la falta de PKI externa para pruebas TLS y la integración SSH deshabilitada por defecto. Este resultado no demuestra por sí solo que las integraciones TLS y SSH externas estén completas.
+
+Para habilitar pruebas TLS que requieren la PKI anterior:
 
 ```powershell
 $pki = Join-Path $env:USERPROFILE ".infraestructura-comunicaciones-seguras\pki"
@@ -313,28 +355,22 @@ $env:TLS_TEST_CERT_FILE = "$pki\server\server.crt"
 $env:TLS_TEST_KEY_FILE = "$pki\server\server.key"
 $env:TLS_TEST_SERVER_NAME = "localhost"
 $env:TLS_TEST_UNTRUSTED_CA_FILE = "$pki\untrusted-ca\other-ca.crt"
-python -m unittest discover -s tests -v
-```
-
-Si falta el material externo, las pruebas TLS de certificado se marcarán como `skipped`, no como aprobadas. La prueba de error de conexión TLS no necesita certificados.
-
-Las pruebas de autenticación crean usuarios, hashes y auditorías solo en un directorio temporal que se elimina al finalizar; no necesitan credenciales externas.
-
-Las pruebas de la simulación IPSec usan claves aleatorias temporales. La integración TLS de esa simulación se marca como `skipped` si falta la PKI externa:
-
-```powershell
-python -m unittest tests.test_ipsec_sim -v
 python -m unittest discover -s tests -p "test*.py" -v
 ```
 
-La prueba SSH de integración está deshabilitada por defecto. Ejecute primero sus pruebas unitarias y después habilítela con las variables de la sección SSH:
+Las pruebas SSH de configuración no necesitan una conexión. La integración SSH requiere OpenSSH Server y la configuración descrita en su sección. La integración TLS/IPsec requiere los archivos de PKI externos. Si faltan estas dependencias, las pruebas se reportan como omitidas, no como aprobadas.
 
-```powershell
-python -m unittest tests.test_ssh.SSHConfigurationTests -v
-python -m unittest tests.test_ssh.SSHIntegrationTests -v
-python -m unittest discover -s tests -v
-```
+## Limitaciones y consideraciones de seguridad
 
-## Seguridad y siguientes etapas
+### ¿Por qué se documentan las limitaciones?
 
-TCP transmite el contenido en claro; no debe utilizarse con datos sensibles. TLS protege el canal y verifica la identidad del servidor con una CA explícita; la autenticación de aplicación no lo sustituye. SSH se limita a la administración remota. El encapsulado tipo IPSec es una simulación didáctica y no una VPN ni IPSec reales. Las claves privadas, hashes, sales y auditorías no se versionan ni se suben a GitHub.
+En seguridad es importante separar lo que el programa demuestra de lo que aún no garantiza. Explicitar los límites evita que los resultados académicos se interpreten como una certificación o como una solución apta para producción, y permite identificar qué necesitaría una implementación real antes de desplegarse.
+
+
+- TCP sin cifrar expone el contenido a observadores de red.
+- El informe de auditoría detectó que faltan controles adicionales para impedir operaciones autenticadas por TCP sin cifrar y limitar conexiones lentas; esos endurecimientos aún no están implementados.
+- También quedan mejoras posibles en limitación de intentos, protección del archivo de usuarios e integridad/rotación de auditoría.
+- La simulación IPsec solo aporta integridad/autenticación HMAC y anti-replay; no proporciona confidencialidad ni una VPN.
+- Los escenarios VPN remoto y sitio a sitio son conceptuales y no establecen túneles de red.
+- Las claves privadas, claves simétricas, certificados de prueba, hashes, sales y auditorías deben permanecer fuera del repositorio. En Windows, revise las ACL de los directorios externos.
+- El proyecto es educativo y no ha sido certificado ni auditado como producto de producción.
