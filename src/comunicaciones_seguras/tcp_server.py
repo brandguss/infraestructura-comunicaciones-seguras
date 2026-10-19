@@ -4,9 +4,16 @@ from __future__ import annotations
 
 import logging
 import socket
+import ssl
 from typing import Final
 
-from .config import TCPConfig, load_tcp_config
+from .config import (
+    TCPConfig,
+    TLSServerConfig,
+    load_communication_mode,
+    load_tcp_config,
+    load_tls_server_config,
+)
 
 BUFFER_SIZE: Final = 4096
 LOGGER = logging.getLogger(__name__)
@@ -50,13 +57,46 @@ def serve(config: TCPConfig) -> None:
                 LOGGER.error("Error al aceptar una conexión: %s", error)
 
 
+def create_server_tls_context(config: TLSServerConfig) -> ssl.SSLContext:
+    """Crea un contexto TLS de servidor con TLS 1.2 como versión mínima."""
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
+    context.load_cert_chain(certfile=config.cert_file, keyfile=config.key_file)
+    return context
+
+
+def serve_tls(network_config: TCPConfig, tls_config: TLSServerConfig) -> None:
+    """Escucha conexiones TLS y procesa el mismo protocolo de mensajes de TCP."""
+    context = create_server_tls_context(tls_config)
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
+        server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        server.bind((network_config.host, network_config.port))
+        server.listen()
+        LOGGER.info("Servidor TLS escuchando en %s:%s", network_config.host, network_config.port)
+
+        while True:
+            connection, address = server.accept()
+            LOGGER.info("Conexión TCP aceptada desde %s:%s; iniciando TLS", *address)
+            try:
+                secure_connection = context.wrap_socket(connection, server_side=True)
+            except ssl.SSLError as error:
+                LOGGER.warning("Negociación TLS rechazada para %s:%s: %s", *address, error)
+                connection.close()
+                continue
+            handle_connection(secure_connection, address)
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     try:
-        serve(load_tcp_config())
+        network_config = load_tcp_config()
+        if load_communication_mode() == "tls":
+            serve_tls(network_config, load_tls_server_config())
+        else:
+            serve(network_config)
     except ValueError as error:
         LOGGER.error("Configuración inválida: %s", error)
-    except OSError as error:
+    except (OSError, ssl.SSLError) as error:
         LOGGER.error("No se pudo iniciar el servidor: %s", error)
     except KeyboardInterrupt:
         LOGGER.info("Servidor detenido por el usuario.")

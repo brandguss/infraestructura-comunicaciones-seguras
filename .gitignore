@@ -16,8 +16,11 @@ logs/
 *.pem
 *.p12
 *.pfx
+*.csr
+*.srl
 private/
 certs/private/
+pki/
 
 # Archivos del sistema y editores
 .DS_Store
