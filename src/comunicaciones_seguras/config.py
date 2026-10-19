@@ -39,6 +39,19 @@ class AuthConfig:
     audit_log_file: Path
 
 
+@dataclass(frozen=True)
+class SSHIntegrationConfig:
+    """Configuración externa para una prueba de integración OpenSSH."""
+
+    executable: str
+    host: str
+    user: str
+    private_key_file: Path
+    port: int
+    timeout_seconds: int
+    known_hosts_file: Path | None
+
+
 def load_tcp_config() -> TCPConfig:
     """Obtiene TCP_HOST y TCP_PORT y comprueba que contienen valores válidos."""
     host = os.getenv("TCP_HOST", "127.0.0.1").strip()
@@ -93,4 +106,37 @@ def load_auth_config() -> AuthConfig:
     return AuthConfig(
         users_file=_required_path("AUTH_USERS_FILE"),
         audit_log_file=_required_path("AUDIT_LOG_FILE"),
+    )
+
+
+def load_ssh_integration_config() -> SSHIntegrationConfig:
+    """Lee la configuración de prueba sin inspeccionar el contenido de ninguna clave."""
+    host = os.getenv("SSH_TEST_HOST", "").strip()
+    user = os.getenv("SSH_TEST_USER", "").strip()
+    key_file = os.getenv("SSH_TEST_PRIVATE_KEY_FILE", "").strip()
+    executable = os.getenv("SSH_EXECUTABLE", "ssh").strip()
+    if not host or host.startswith("-") or "@" in host or any(character.isspace() for character in host):
+        raise ValueError("SSH_TEST_HOST es obligatorio y debe ser un host sin espacios ni opciones.")
+    if not user or user.startswith("-") or "@" in user or any(character.isspace() for character in user):
+        raise ValueError("SSH_TEST_USER es obligatorio y debe ser un usuario sin espacios ni opciones.")
+    if not key_file:
+        raise ValueError("SSH_TEST_PRIVATE_KEY_FILE es obligatorio.")
+    if not executable:
+        raise ValueError("SSH_EXECUTABLE no puede estar vacío.")
+    try:
+        port = int(os.getenv("SSH_TEST_PORT", "22"))
+        timeout_seconds = int(os.getenv("SSH_TEST_TIMEOUT", "15"))
+    except ValueError as error:
+        raise ValueError("SSH_TEST_PORT y SSH_TEST_TIMEOUT deben ser enteros.") from error
+    if not 1 <= port <= 65535 or not 1 <= timeout_seconds <= 60:
+        raise ValueError("SSH_TEST_PORT o SSH_TEST_TIMEOUT están fuera del rango seguro.")
+    known_hosts = os.getenv("SSH_TEST_KNOWN_HOSTS_FILE", "").strip()
+    return SSHIntegrationConfig(
+        executable=executable,
+        host=host,
+        user=user,
+        private_key_file=Path(key_file),
+        port=port,
+        timeout_seconds=timeout_seconds,
+        known_hosts_file=Path(known_hosts) if known_hosts else None,
     )

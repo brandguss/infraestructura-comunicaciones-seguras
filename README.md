@@ -2,17 +2,18 @@
 
 Proyecto académico incremental para representar una infraestructura de comunicaciones seguras en una pequeña organización.
 
-## Etapas 1, 2 y 3: TCP, TLS, autenticación y auditoría
+## Etapas 1 a 4: TCP, TLS, autenticación, auditoría y SSH
 
 El proyecto contiene un servidor y un cliente implementados exclusivamente con la biblioteca estándar de Python. Ambos intercambian texto UTF-8 y una confirmación. Se puede elegir entre TCP sin cifrar, para comparación académica, y TLS real con certificados firmados por una CA de pruebas.
 
-TLS, autenticación, autorización por roles y auditoría están implementados. SSH, IPSec y VPN aún no forman parte del proyecto.
+TLS, autenticación, autorización por roles, auditoría y una verificación de administración remota mediante OpenSSH están implementados. IPSec y VPN aún no forman parte del proyecto.
 
 ## Requisitos detectados
 
 - Python: `3.13.15` (comando `python`)
 - Git: no disponible en el `PATH` durante la inspección
 - OpenSSL: `OpenSSL 3.6.5`, en `C:\Program Files\OpenSSL-Win64\bin\openssl.exe`
+- OpenSSH Client y OpenSSH Server de Windows: necesarios solo para la prueba de integración SSH opcional.
 
 No se requieren paquetes externos.
 
@@ -30,6 +31,7 @@ tests/
   test_tcp.py     # Pruebas automatizadas locales
   test_tls.py     # Pruebas TLS con PKI externa
   test_auth.py    # Pruebas de autenticación, roles y auditoría
+  test_ssh.py     # Configuración y prueba real opcional de OpenSSH
 ```
 
 ## Configuración
@@ -45,6 +47,14 @@ tests/
 | `TLS_SERVER_NAME` | `TCP_HOST` | Nombre o IP que el cliente valida contra el SAN del certificado. |
 | `AUTH_USERS_FILE` | — | Archivo externo JSON con usuarios, sales y hashes scrypt. |
 | `AUDIT_LOG_FILE` | — | Archivo externo JSON Lines para eventos de auditoría. |
+| `SSH_TEST_ENABLED` | — | Use `1` para habilitar explícitamente la prueba de integración SSH. |
+| `SSH_TEST_HOST` | — | Host del servidor OpenSSH de pruebas. |
+| `SSH_TEST_USER` | — | Usuario remoto de pruebas. |
+| `SSH_TEST_PRIVATE_KEY_FILE` | — | Ruta externa a la clave privada de OpenSSH. |
+| `SSH_TEST_PORT` | `22` | Puerto del servidor OpenSSH. |
+| `SSH_TEST_TIMEOUT` | `15` | Límite de conexión y ejecución, entre 1 y 60 segundos. |
+| `SSH_TEST_KNOWN_HOSTS_FILE` | — | Archivo `known_hosts` externo opcional; si se omite se usa el predeterminado de OpenSSH. |
+| `SSH_EXECUTABLE` | `ssh` | Cliente OpenSSH a invocar. |
 
 TLS exige CA explícita, validación del certificado, validación de hostname y TLS 1.2 o superior. No existe un modo para desactivar estas comprobaciones.
 
@@ -70,6 +80,40 @@ python -m src.comunicaciones_seguras.user_setup
 ```
 
 La utilidad solicita contraseñas sin mostrarlas y solo persiste sales y hashes scrypt. No use `--overwrite` salvo que desee reemplazar deliberadamente el archivo externo. Las claves, hashes, sales y auditorías no deben subirse a GitHub.
+
+## Administración remota segura mediante SSH
+
+Esta etapa integra una **prueba de administración remota** contra un servidor OpenSSH real ya instalado. El proyecto no implementa un servidor SSH en Python, no abre puertos adicionales, ni modifica `sshd_config`, el firewall, las claves autorizadas o los permisos de Windows.
+
+La prueba invoca el cliente OpenSSH con autenticación por clave, `BatchMode=yes`, `PasswordAuthentication=no`, límite de tiempo y `StrictHostKeyChecking=yes`. Por tanto, la clave de host del servidor debe existir previamente en el archivo `known_hosts` elegido. Nunca se usa `StrictHostKeyChecking=no`.
+
+La clave privada debe permanecer fuera del repositorio. No la copie, imprima ni incluya en variables registradas. El patrón `.ssh/` y los nombres convencionales de identidades privadas en la raíz del proyecto se excluyen mediante `.gitignore`; no se excluyen de forma genérica archivos que solo comienzan por `id_`.
+
+Para un equipo Windows configurado con OpenSSH Server, habilite la integración de forma explícita en PowerShell. Ajuste únicamente los valores externos correspondientes a su entorno:
+
+```powershell
+$env:SSH_TEST_ENABLED = "1"
+$env:SSH_TEST_HOST = "localhost"
+$env:SSH_TEST_USER = "brand"
+$env:SSH_TEST_PRIVATE_KEY_FILE = Join-Path $env:USERPROFILE ".ssh\id_ed25519_sdi"
+$env:SSH_TEST_PORT = "22"
+$env:SSH_TEST_TIMEOUT = "15"
+# Opcional: use un archivo known_hosts específico ya preparado.
+# $env:SSH_TEST_KNOWN_HOSTS_FILE = Join-Path $env:USERPROFILE ".ssh\known_hosts"
+python -m unittest tests.test_ssh.SSHIntegrationTests -v
+```
+
+El resultado esperado es una ejecución exitosa de `whoami` con salida no vacía. Si falla después de habilitarse, la prueba falla —no se omite— y debe revisarse: servicio OpenSSH Server, puerto, usuario, clave pública autorizada, ruta de clave privada, permisos de la clave y confianza previa de la clave de host. Si `SSH_TEST_ENABLED` no vale `1`, la prueba se marca explícitamente como `skipped` para que la suite general no dependa de infraestructura local.
+
+Ejecute la integración desde la sesión de Windows del usuario que tiene acceso a la clave privada o a su agente SSH. Un entorno automatizado restringido puede no tener permiso de abrir esa clave, incluso si el comando manual funciona en una consola interactiva; la prueba lo informará como `clave privada no disponible para el proceso`, sin mostrar rutas ni secretos. No cambie permisos ni quite la passphrase automáticamente para evitar este error.
+
+Las pruebas de configuración SSH no abren conexiones. La prueba de integración sí ejecuta `whoami`; una comprobación manual equivalente es:
+
+```powershell
+ssh -o BatchMode=yes -o PasswordAuthentication=no -o StrictHostKeyChecking=yes -o "ConnectTimeout=$env:SSH_TEST_TIMEOUT" -o NumberOfPasswordPrompts=0 -i $env:SSH_TEST_PRIVATE_KEY_FILE -p $env:SSH_TEST_PORT "$env:SSH_TEST_USER@$env:SSH_TEST_HOST" whoami
+```
+
+SSH protege la administración remota del sistema, pero no reemplaza la autenticación, la autorización por roles ni la auditoría de la aplicación. Tampoco es IPSec ni una VPN. El usuario de desarrollo indicado pertenece a administradores de Windows; en producción use una cuenta dedicada con privilegios mínimos y una política de claves separada.
 
 ## PKI de pruebas fuera del repositorio
 
@@ -221,6 +265,14 @@ Si falta el material externo, las pruebas TLS de certificado se marcarán como `
 
 Las pruebas de autenticación crean usuarios, hashes y auditorías solo en un directorio temporal que se elimina al finalizar; no necesitan credenciales externas.
 
+La prueba SSH de integración está deshabilitada por defecto. Ejecute primero sus pruebas unitarias y después habilítela con las variables de la sección SSH:
+
+```powershell
+python -m unittest tests.test_ssh.SSHConfigurationTests -v
+python -m unittest tests.test_ssh.SSHIntegrationTests -v
+python -m unittest discover -s tests -v
+```
+
 ## Seguridad y siguientes etapas
 
-TCP transmite el contenido en claro; no debe utilizarse con datos sensibles. TLS protege el canal y verifica la identidad del servidor con una CA explícita; la autenticación de aplicación no lo sustituye. Las claves privadas, hashes, sales y auditorías no se versionan ni se suben a GitHub.
+TCP transmite el contenido en claro; no debe utilizarse con datos sensibles. TLS protege el canal y verifica la identidad del servidor con una CA explícita; la autenticación de aplicación no lo sustituye. SSH se limita a la administración remota y no implementa IPSec ni VPN. Las claves privadas, hashes, sales y auditorías no se versionan ni se suben a GitHub.

@@ -27,6 +27,15 @@ users.json
 audit.jsonl
 auth/
 
+# Material privado habitual de OpenSSH
+.ssh/
+/id_rsa
+/id_dsa
+/id_ecdsa
+/id_ed25519
+/id_ed25519_sk
+/id_xmss
+
 # Archivos del sistema y editores
 .DS_Store
 Thumbs.db
