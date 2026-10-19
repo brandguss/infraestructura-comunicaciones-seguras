@@ -1,0 +1,26 @@
+# Entornos virtuales y caché de Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Registros y archivos temporales
+logs/
+*.log
+*.tmp
+*.temp
+
+# Material criptográfico privado: nunca versionar
+*.key
+*.pem
+*.p12
+*.pfx
+private/
+certs/private/
+
+# Archivos del sistema y editores
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
