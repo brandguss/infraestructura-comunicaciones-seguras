@@ -31,6 +31,14 @@ class TLSServerConfig:
     key_file: Path
 
 
+@dataclass(frozen=True)
+class AuthConfig:
+    """Rutas externas para usuarios y eventos de auditoría."""
+
+    users_file: Path
+    audit_log_file: Path
+
+
 def load_tcp_config() -> TCPConfig:
     """Obtiene TCP_HOST y TCP_PORT y comprueba que contienen valores válidos."""
     host = os.getenv("TCP_HOST", "127.0.0.1").strip()
@@ -77,4 +85,12 @@ def load_tls_server_config() -> TLSServerConfig:
     return TLSServerConfig(
         cert_file=_required_path("TLS_CERT_FILE"),
         key_file=_required_path("TLS_KEY_FILE"),
+    )
+
+
+def load_auth_config() -> AuthConfig:
+    """Carga las rutas que habilitan las operaciones protegidas del servidor."""
+    return AuthConfig(
+        users_file=_required_path("AUTH_USERS_FILE"),
+        audit_log_file=_required_path("AUDIT_LOG_FILE"),
     )

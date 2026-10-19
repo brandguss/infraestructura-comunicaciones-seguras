@@ -22,6 +22,11 @@ private/
 certs/private/
 pki/
 
+# Usuarios y auditoría de desarrollo: mantener fuera del repositorio
+users.json
+audit.jsonl
+auth/
+
 # Archivos del sistema y editores
 .DS_Store
 Thumbs.db

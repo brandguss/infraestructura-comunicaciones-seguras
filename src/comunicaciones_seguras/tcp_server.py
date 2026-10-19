@@ -3,14 +3,19 @@
 from __future__ import annotations
 
 import logging
+import json
 import socket
 import ssl
 from typing import Final
 
+from .audit import AuditLogger
+from .auth import AccessController, AuthenticationError, AuthorizationError, UserStoreError
 from .config import (
+    AuthConfig,
     TCPConfig,
     TLSServerConfig,
     load_communication_mode,
+    load_auth_config,
     load_tcp_config,
     load_tls_server_config,
 )
@@ -19,7 +24,45 @@ BUFFER_SIZE: Final = 4096
 LOGGER = logging.getLogger(__name__)
 
 
-def handle_connection(connection: socket.socket, address: tuple[str, int]) -> None:
+def _send_protected_response(connection: socket.socket, message: dict[str, object]) -> None:
+    connection.sendall(json.dumps(message, ensure_ascii=False).encode("utf-8"))
+
+
+def _handle_protected_request(
+    connection: socket.socket,
+    request: dict[str, object],
+    controller: AccessController | None,
+    audit_logger: AuditLogger | None,
+    protected_error: str | None,
+) -> None:
+    username = request.get("username") if isinstance(request.get("username"), str) else None
+    operation = request.get("operation")
+    if controller is None or audit_logger is None:
+        LOGGER.warning("Operación protegida rechazada por configuración: %s", protected_error)
+        _send_protected_response(connection, {"result": "denied", "reason": "servicio_no_disponible"})
+        return
+    try:
+        user, data = controller.execute(username, request.get("password"), operation)
+        audit_logger.record(username=user.username, operation=operation, result="allowed", reason=None)
+        _send_protected_response(connection, {"result": "ok", "operation": operation, "data": data})
+    except AuthenticationError:
+        audit_logger.record(username=username, operation=operation, result="denied", reason="credenciales_invalidas")
+        _send_protected_response(connection, {"result": "denied", "reason": "acceso_denegado"})
+    except AuthorizationError:
+        audit_logger.record(username=username, operation=operation, result="denied", reason="permiso_insuficiente")
+        _send_protected_response(connection, {"result": "denied", "reason": "acceso_denegado"})
+    except OSError as error:
+        LOGGER.error("No se pudo registrar la auditoría: %s", error)
+        _send_protected_response(connection, {"result": "denied", "reason": "servicio_no_disponible"})
+
+
+def handle_connection(
+    connection: socket.socket,
+    address: tuple[str, int],
+    controller: AccessController | None = None,
+    audit_logger: AuditLogger | None = None,
+    protected_error: str | None = None,
+) -> None:
     """Procesa un mensaje de un cliente y devuelve una confirmación."""
     try:
         data = connection.recv(BUFFER_SIZE)
@@ -29,7 +72,15 @@ def handle_connection(connection: socket.socket, address: tuple[str, int]) -> No
 
         message = data.decode("utf-8")
         LOGGER.info("Mensaje recibido de %s:%s", *address)
-        connection.sendall(f"RECIBIDO: {message}".encode("utf-8"))
+        try:
+            request = json.loads(message)
+        except json.JSONDecodeError:
+            request = None
+        if isinstance(request, dict) and "operation" in request:
+            _handle_protected_request(connection, request, controller, audit_logger, protected_error)
+        else:
+            # Compatibilidad deliberada con el eco TCP de la etapa 1.
+            connection.sendall(f"RECIBIDO: {message}".encode("utf-8"))
     except UnicodeDecodeError:
         LOGGER.warning("Datos no UTF-8 rechazados desde %s:%s", *address)
         connection.sendall(b"ERROR: el mensaje debe usar UTF-8")
@@ -40,7 +91,12 @@ def handle_connection(connection: socket.socket, address: tuple[str, int]) -> No
         LOGGER.info("Conexión cerrada con %s:%s", *address)
 
 
-def serve(config: TCPConfig) -> None:
+def serve(
+    config: TCPConfig,
+    controller: AccessController | None = None,
+    audit_logger: AuditLogger | None = None,
+    protected_error: str | None = None,
+) -> None:
     """Escucha conexiones TCP hasta que se interrumpa el proceso."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
         server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -52,7 +108,7 @@ def serve(config: TCPConfig) -> None:
             try:
                 connection, address = server.accept()
                 LOGGER.info("Conexión aceptada desde %s:%s", *address)
-                handle_connection(connection, address)
+                handle_connection(connection, address, controller, audit_logger, protected_error)
             except OSError as error:
                 LOGGER.error("Error al aceptar una conexión: %s", error)
 
@@ -65,7 +121,13 @@ def create_server_tls_context(config: TLSServerConfig) -> ssl.SSLContext:
     return context
 
 
-def serve_tls(network_config: TCPConfig, tls_config: TLSServerConfig) -> None:
+def serve_tls(
+    network_config: TCPConfig,
+    tls_config: TLSServerConfig,
+    controller: AccessController | None = None,
+    audit_logger: AuditLogger | None = None,
+    protected_error: str | None = None,
+) -> None:
     """Escucha conexiones TLS y procesa el mismo protocolo de mensajes de TCP."""
     context = create_server_tls_context(tls_config)
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
@@ -83,17 +145,28 @@ def serve_tls(network_config: TCPConfig, tls_config: TLSServerConfig) -> None:
                 LOGGER.warning("Negociación TLS rechazada para %s:%s: %s", *address, error)
                 connection.close()
                 continue
-            handle_connection(secure_connection, address)
+            handle_connection(secure_connection, address, controller, audit_logger, protected_error)
+
+
+def load_access_control() -> tuple[AccessController | None, AuditLogger | None, str | None]:
+    """Carga la seguridad de aplicación; una falla deja las operaciones protegidas cerradas."""
+    try:
+        config: AuthConfig = load_auth_config()
+        return AccessController.from_file(config.users_file), AuditLogger(config.audit_log_file), None
+    except (ValueError, UserStoreError, OSError) as error:
+        LOGGER.warning("Operaciones protegidas no disponibles: %s", error)
+        return None, None, "configuración de autenticación no disponible"
 
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     try:
         network_config = load_tcp_config()
+        controller, audit_logger, protected_error = load_access_control()
         if load_communication_mode() == "tls":
-            serve_tls(network_config, load_tls_server_config())
+            serve_tls(network_config, load_tls_server_config(), controller, audit_logger, protected_error)
         else:
-            serve(network_config)
+            serve(network_config, controller, audit_logger, protected_error)
     except ValueError as error:
         LOGGER.error("Configuración inválida: %s", error)
     except (OSError, ssl.SSLError) as error:

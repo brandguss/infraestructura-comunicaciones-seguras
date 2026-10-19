@@ -2,11 +2,11 @@
 
 Proyecto académico incremental para representar una infraestructura de comunicaciones seguras en una pequeña organización.
 
-## Etapas 1 y 2: TCP y TLS con PKI de pruebas
+## Etapas 1, 2 y 3: TCP, TLS, autenticación y auditoría
 
 El proyecto contiene un servidor y un cliente implementados exclusivamente con la biblioteca estándar de Python. Ambos intercambian texto UTF-8 y una confirmación. Se puede elegir entre TCP sin cifrar, para comparación académica, y TLS real con certificados firmados por una CA de pruebas.
 
-TLS está implementado. SSH, IPSec y VPN aún no forman parte del proyecto.
+TLS, autenticación, autorización por roles y auditoría están implementados. SSH, IPSec y VPN aún no forman parte del proyecto.
 
 ## Requisitos detectados
 
@@ -23,9 +23,13 @@ src/comunicaciones_seguras/
   config.py       # Configuración desde variables de entorno
   tcp_server.py   # Servidor TCP
   tcp_client.py   # Cliente TCP y TLS
+  auth.py         # Usuarios, scrypt y permisos del servidor
+  audit.py        # Auditoría JSON Lines externa
+  user_setup.py   # Creador interactivo de usuarios de demostración
 tests/
   test_tcp.py     # Pruebas automatizadas locales
   test_tls.py     # Pruebas TLS con PKI externa
+  test_auth.py    # Pruebas de autenticación, roles y auditoría
 ```
 
 ## Configuración
@@ -39,8 +43,33 @@ tests/
 | `TLS_CERT_FILE` | — | Ruta externa al certificado público del servidor. Servidor TLS. |
 | `TLS_KEY_FILE` | — | Ruta externa a la clave privada del servidor. Servidor TLS. |
 | `TLS_SERVER_NAME` | `TCP_HOST` | Nombre o IP que el cliente valida contra el SAN del certificado. |
+| `AUTH_USERS_FILE` | — | Archivo externo JSON con usuarios, sales y hashes scrypt. |
+| `AUDIT_LOG_FILE` | — | Archivo externo JSON Lines para eventos de auditoría. |
 
 TLS exige CA explícita, validación del certificado, validación de hostname y TLS 1.2 o superior. No existe un modo para desactivar estas comprobaciones.
+
+## Autenticación, roles y auditoría
+
+Las operaciones protegidas se envían con usuario, contraseña y operación; el cliente no envía un rol. El servidor valida las credenciales mediante `hashlib.scrypt` con una sal aleatoria por usuario y `hmac.compare_digest`, y obtiene el rol exclusivamente de `AUTH_USERS_FILE`.
+
+| Operación | Administrador | Operador | Consulta |
+| --- | --- | --- | --- |
+| `status` | Sí | Sí | Sí |
+| `list_resources` | Sí | Sí | No |
+| `admin_info` | Sí | No | No |
+
+Una credencial errónea siempre produce `acceso_denegado`, sin informar si el error fue el usuario o la contraseña. Una configuración ausente, ilegible o sin auditoría disponible rechaza las operaciones protegidas. El flujo de texto simple de la etapa 1 se conserva como eco compatible; no es una operación protegida y no debe usarse para administración.
+
+Prepare rutas externas, nunca dentro del repositorio:
+
+```powershell
+$auth = Join-Path $env:USERPROFILE ".infraestructura-comunicaciones-seguras\auth"
+$env:AUTH_USERS_FILE = Join-Path $auth "users.json"
+$env:AUDIT_LOG_FILE = Join-Path $auth "audit.jsonl"
+python -m src.comunicaciones_seguras.user_setup
+```
+
+La utilidad solicita contraseñas sin mostrarlas y solo persiste sales y hashes scrypt. No use `--overwrite` salvo que desee reemplazar deliberadamente el archivo externo. Las claves, hashes, sales y auditorías no deben subirse a GitHub.
 
 ## PKI de pruebas fuera del repositorio
 
@@ -96,6 +125,21 @@ python -m src.comunicaciones_seguras.tcp_client "Mensaje de prueba"
 
 El cliente debe mostrar `RECIBIDO: Mensaje de prueba`. Para detener el servidor, presione `Ctrl+C`.
 
+Para ejecutar operaciones autenticadas sobre TCP (solo para comparar el riesgo de canal sin cifrar), configure primero las rutas de autenticación en la terminal del servidor y del cliente. Es preferible TLS porque la contraseña viaja como parte de la solicitud de aplicación.
+
+```powershell
+$auth = Join-Path $env:USERPROFILE ".infraestructura-comunicaciones-seguras\auth"
+$env:AUTH_USERS_FILE = Join-Path $auth "users.json"
+$env:AUDIT_LOG_FILE = Join-Path $auth "audit.jsonl"
+python -m src.comunicaciones_seguras.tcp_server
+```
+
+En otra terminal:
+
+```powershell
+python -m src.comunicaciones_seguras.tcp_client --username consulta --operation status
+```
+
 ## Ejecución en dos computadoras
 
 En el equipo servidor:
@@ -140,6 +184,17 @@ $env:TLS_SERVER_NAME = "localhost"
 python -m src.comunicaciones_seguras.tcp_client "Mensaje TLS de prueba"
 ```
 
+Para operaciones protegidas por TLS, agregue las mismas variables externas de autenticación en la terminal del servidor y ejecute el cliente con una operación:
+
+```powershell
+$auth = Join-Path $env:USERPROFILE ".infraestructura-comunicaciones-seguras\auth"
+$env:AUTH_USERS_FILE = Join-Path $auth "users.json"
+$env:AUDIT_LOG_FILE = Join-Path $auth "audit.jsonl"
+# En el servidor, conserve además COMMUNICATION_MODE=tls, TLS_CERT_FILE y TLS_KEY_FILE.
+# En el cliente, conserve COMMUNICATION_MODE=tls, TLS_CA_FILE y TLS_SERVER_NAME.
+python -m src.comunicaciones_seguras.tcp_client --username admin --operation admin_info
+```
+
 Para otro equipo, regenere el certificado con el DNS o IP real del servidor incluido en el SAN y defina `TLS_SERVER_NAME` con ese mismo valor. No sustituya la validación por un certificado autofirmado del servidor.
 
 ## Pruebas
@@ -164,6 +219,8 @@ python -m unittest discover -s tests -v
 
 Si falta el material externo, las pruebas TLS de certificado se marcarán como `skipped`, no como aprobadas. La prueba de error de conexión TLS no necesita certificados.
 
+Las pruebas de autenticación crean usuarios, hashes y auditorías solo en un directorio temporal que se elimina al finalizar; no necesitan credenciales externas.
+
 ## Seguridad y siguientes etapas
 
-TCP transmite el contenido en claro; no debe utilizarse con datos sensibles. TLS protege el canal y verifica la identidad del servidor con una CA explícita. Las claves privadas no se versionan ni se suben a GitHub.
+TCP transmite el contenido en claro; no debe utilizarse con datos sensibles. TLS protege el canal y verifica la identidad del servidor con una CA explícita; la autenticación de aplicación no lo sustituye. Las claves privadas, hashes, sales y auditorías no se versionan ni se suben a GitHub.

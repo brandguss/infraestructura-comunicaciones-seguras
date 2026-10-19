@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import getpass
+import json
 import logging
 import socket
 import ssl
@@ -71,23 +73,39 @@ def send_tls_message(
     return response.decode("utf-8")
 
 
+def build_authenticated_request(username: str, password: str, operation: str) -> str:
+    """Construye una solicitud sin rol: el servidor decide todos los permisos."""
+    if not username or not password or not operation:
+        raise ValueError("Usuario, contraseña y operación son obligatorios.")
+    return json.dumps({"username": username, "password": password, "operation": operation})
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Envía un mensaje a un servidor TCP.")
-    parser.add_argument("message", help="Texto UTF-8 que se enviará al servidor.")
+    parser.add_argument("message", nargs="?", help="Texto para el modo de eco compatible.")
+    parser.add_argument("--username", help="Usuario para una operación protegida.")
+    parser.add_argument("--operation", choices=("status", "list_resources", "admin_info"))
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
     try:
+        if bool(args.username) != bool(args.operation):
+            parser.error("Use --username y --operation juntos.")
+        message = args.message
+        if args.operation:
+            message = build_authenticated_request(args.username, getpass.getpass("Contraseña: "), args.operation)
+        if not message:
+            parser.error("Indique un mensaje o una operación protegida.")
         network_config = load_tcp_config()
         if load_communication_mode() == "tls":
             print(send_tls_message(
                 network_config.host,
                 network_config.port,
-                args.message,
+                message,
                 load_tls_client_config(),
             ))
         else:
-            print(send_message(network_config.host, network_config.port, args.message))
+            print(send_message(network_config.host, network_config.port, message))
     except (ValueError, ConnectionError, OSError, ssl.SSLError) as error:
         LOGGER.error("Error del cliente: %s", error)
 
