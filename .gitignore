@@ -36,6 +36,10 @@ auth/
 /id_ed25519_sk
 /id_xmss
 
+# Claves y asociaciones externas de la simulación educativa IPSec
+ipsec/
+ipsec_sim_key.json
+
 # Archivos del sistema y editores
 .DS_Store
 Thumbs.db

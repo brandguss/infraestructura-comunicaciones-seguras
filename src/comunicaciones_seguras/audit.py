@@ -13,6 +13,12 @@ class AuditLogger:
     def __init__(self, path: Path) -> None:
         self.path = path
 
+    def ensure_writable(self) -> None:
+        """Comprueba la disponibilidad del destino sin registrar contenido sensible."""
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        with self.path.open("a", encoding="utf-8"):
+            pass
+
     def record(self, *, username: str | None, operation: object, result: str, reason: str | None) -> None:
         event = {
             "timestamp": datetime.now(UTC).isoformat(),

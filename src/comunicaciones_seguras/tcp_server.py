@@ -11,14 +11,17 @@ from typing import Final
 from .audit import AuditLogger
 from .auth import AccessController, AuthenticationError, AuthorizationError, UserStoreError
 from .config import (
-    AuthConfig,
     TCPConfig,
     TLSServerConfig,
     load_communication_mode,
+    load_audit_config,
     load_auth_config,
     load_tcp_config,
     load_tls_server_config,
+    ipsec_simulation_enabled,
+    load_ipsec_simulation_settings,
 )
+from .ipsec_sim import IPSecSimulationConfig, IPSecSimulationError, IPSecSimulator
 
 BUFFER_SIZE: Final = 4096
 LOGGER = logging.getLogger(__name__)
@@ -56,12 +59,23 @@ def _handle_protected_request(
         _send_protected_response(connection, {"result": "denied", "reason": "servicio_no_disponible"})
 
 
+def _record_ipsec_rejection(audit_logger: AuditLogger | None, reason: str) -> None:
+    if audit_logger is None:
+        return
+    try:
+        audit_logger.record(username=None, operation="ipsec_sim", result="denied", reason=reason)
+    except OSError as error:
+        LOGGER.error("No se pudo registrar el rechazo de simulación: %s", error)
+
+
 def handle_connection(
     connection: socket.socket,
     address: tuple[str, int],
     controller: AccessController | None = None,
     audit_logger: AuditLogger | None = None,
     protected_error: str | None = None,
+    ipsec_simulator: IPSecSimulator | None = None,
+    ipsec_required: bool = False,
 ) -> None:
     """Procesa un mensaje de un cliente y devuelve una confirmación."""
     try:
@@ -71,6 +85,17 @@ def handle_connection(
             return
 
         message = data.decode("utf-8")
+        if ipsec_required:
+            if ipsec_simulator is None:
+                _record_ipsec_rejection(audit_logger, "ipsec_configuration_unavailable")
+                connection.sendall(b"ERROR: simulacion de encapsulado no disponible")
+                return
+            try:
+                message = ipsec_simulator.decapsulate(message)
+            except IPSecSimulationError as error:
+                _record_ipsec_rejection(audit_logger, error.reason)
+                connection.sendall(b"ERROR: paquete de simulacion rechazado")
+                return
         LOGGER.info("Mensaje recibido de %s:%s", *address)
         try:
             request = json.loads(message)
@@ -96,6 +121,8 @@ def serve(
     controller: AccessController | None = None,
     audit_logger: AuditLogger | None = None,
     protected_error: str | None = None,
+    ipsec_simulator: IPSecSimulator | None = None,
+    ipsec_required: bool = False,
 ) -> None:
     """Escucha conexiones TCP hasta que se interrumpa el proceso."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
@@ -108,7 +135,7 @@ def serve(
             try:
                 connection, address = server.accept()
                 LOGGER.info("Conexión aceptada desde %s:%s", *address)
-                handle_connection(connection, address, controller, audit_logger, protected_error)
+                handle_connection(connection, address, controller, audit_logger, protected_error, ipsec_simulator, ipsec_required)
             except OSError as error:
                 LOGGER.error("Error al aceptar una conexión: %s", error)
 
@@ -127,6 +154,8 @@ def serve_tls(
     controller: AccessController | None = None,
     audit_logger: AuditLogger | None = None,
     protected_error: str | None = None,
+    ipsec_simulator: IPSecSimulator | None = None,
+    ipsec_required: bool = False,
 ) -> None:
     """Escucha conexiones TLS y procesa el mismo protocolo de mensajes de TCP."""
     context = create_server_tls_context(tls_config)
@@ -145,28 +174,57 @@ def serve_tls(
                 LOGGER.warning("Negociación TLS rechazada para %s:%s: %s", *address, error)
                 connection.close()
                 continue
-            handle_connection(secure_connection, address, controller, audit_logger, protected_error)
+            handle_connection(secure_connection, address, controller, audit_logger, protected_error, ipsec_simulator, ipsec_required)
 
 
-def load_access_control() -> tuple[AccessController | None, AuditLogger | None, str | None]:
+def load_access_control() -> tuple[AccessController | None, str | None]:
     """Carga la seguridad de aplicación; una falla deja las operaciones protegidas cerradas."""
     try:
-        config: AuthConfig = load_auth_config()
-        return AccessController.from_file(config.users_file), AuditLogger(config.audit_log_file), None
+        config = load_auth_config()
+        return AccessController.from_file(config.users_file), None
     except (ValueError, UserStoreError, OSError) as error:
         LOGGER.warning("Operaciones protegidas no disponibles: %s", error)
-        return None, None, "configuración de autenticación no disponible"
+        return None, "configuración de autenticación no disponible"
+
+
+def load_audit_logger() -> tuple[AuditLogger | None, str | None]:
+    """Inicializa auditoría por separado para registrar rechazos IPSec sin usuarios."""
+    try:
+        audit_logger = AuditLogger(load_audit_config().audit_log_file)
+        audit_logger.ensure_writable()
+        return audit_logger, None
+    except (ValueError, OSError) as error:
+        LOGGER.warning("Auditoría no disponible: %s", error)
+        return None, "configuración de auditoría no disponible"
+
+
+def load_ipsec_simulator() -> tuple[IPSecSimulator | None, bool]:
+    """Carga la simulación opcional; ante error, el servidor rechaza sus paquetes."""
+    try:
+        if not ipsec_simulation_enabled():
+            return None, False
+        settings = load_ipsec_simulation_settings()
+        return IPSecSimulator(IPSecSimulationConfig(**settings.__dict__)), True
+    except ValueError as error:
+        LOGGER.warning("Simulación de encapsulado no disponible: %s", error)
+        return None, True
 
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     try:
         network_config = load_tcp_config()
-        controller, audit_logger, protected_error = load_access_control()
+        controller, protected_error = load_access_control()
+        audit_logger, audit_error = load_audit_logger()
+        if protected_error is None and audit_error is not None:
+            protected_error = audit_error
+        ipsec_simulator, ipsec_required = load_ipsec_simulator()
+        if ipsec_required and audit_logger is None:
+            raise ValueError("La simulación IPSec requiere AUDIT_LOG_FILE disponible; el servidor no se iniciará.")
         if load_communication_mode() == "tls":
-            serve_tls(network_config, load_tls_server_config(), controller, audit_logger, protected_error)
+            serve_tls(network_config, load_tls_server_config(), controller, audit_logger, protected_error, ipsec_simulator, ipsec_required)
         else:
-            serve(network_config, controller, audit_logger, protected_error)
+            serve(network_config, controller, audit_logger, protected_error, ipsec_simulator, ipsec_required)
     except ValueError as error:
         LOGGER.error("Configuración inválida: %s", error)
     except (OSError, ssl.SSLError) as error:

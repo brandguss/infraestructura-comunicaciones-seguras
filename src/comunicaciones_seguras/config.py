@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
+import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -33,9 +36,15 @@ class TLSServerConfig:
 
 @dataclass(frozen=True)
 class AuthConfig:
-    """Rutas externas para usuarios y eventos de auditoría."""
+    """Ruta externa del almacén de usuarios."""
 
     users_file: Path
+
+
+@dataclass(frozen=True)
+class AuditConfig:
+    """Ruta externa para eventos estructurados de auditoría."""
+
     audit_log_file: Path
 
 
@@ -50,6 +59,18 @@ class SSHIntegrationConfig:
     port: int
     timeout_seconds: int
     known_hosts_file: Path | None
+
+
+@dataclass(frozen=True)
+class IPSecSimulationSettings:
+    """Configuración externa de la simulación educativa tipo IPSec."""
+
+    key: bytes
+    spi: str
+    mode: str
+    replay_window: int
+    max_message_bytes: int
+    sequence_start: int
 
 
 def load_tcp_config() -> TCPConfig:
@@ -81,7 +102,7 @@ def load_communication_mode() -> str:
 def _required_path(variable: str) -> Path:
     value = os.getenv(variable, "").strip()
     if not value:
-        raise ValueError(f"Debe definir la variable {variable} para usar TLS.")
+        raise ValueError(f"Debe definir la variable {variable}.")
     return Path(value)
 
 
@@ -103,10 +124,12 @@ def load_tls_server_config() -> TLSServerConfig:
 
 def load_auth_config() -> AuthConfig:
     """Carga las rutas que habilitan las operaciones protegidas del servidor."""
-    return AuthConfig(
-        users_file=_required_path("AUTH_USERS_FILE"),
-        audit_log_file=_required_path("AUDIT_LOG_FILE"),
-    )
+    return AuthConfig(users_file=_required_path("AUTH_USERS_FILE"))
+
+
+def load_audit_config() -> AuditConfig:
+    """Carga la ruta de auditoría independientemente del almacén de usuarios."""
+    return AuditConfig(audit_log_file=_required_path("AUDIT_LOG_FILE"))
 
 
 def load_ssh_integration_config() -> SSHIntegrationConfig:
@@ -140,3 +163,44 @@ def load_ssh_integration_config() -> SSHIntegrationConfig:
         timeout_seconds=timeout_seconds,
         known_hosts_file=Path(known_hosts) if known_hosts else None,
     )
+
+
+def ipsec_simulation_enabled() -> bool:
+    """Indica si se debe activar la capa opcional de encapsulado simulado."""
+    value = os.getenv("IPSEC_SIM_ENABLED", "0").strip().lower()
+    if value in {"", "0", "false", "no"}:
+        return False
+    if value in {"1", "true", "yes"}:
+        return True
+    raise ValueError("IPSEC_SIM_ENABLED debe ser 0 o 1.")
+
+
+def load_ipsec_simulation_settings() -> IPSecSimulationSettings:
+    """Carga clave externa y parámetros; no expone el material secreto en errores."""
+    key_path = _required_path("IPSEC_SIM_KEY_FILE")
+    try:
+        document = json.loads(key_path.read_text(encoding="utf-8"))
+        if set(document) != {"key_b64"}:
+            raise ValueError("campos inesperados")
+        key = base64.b64decode(document["key_b64"].encode("ascii"), validate=True)
+        if len(key) != 32:
+            raise ValueError("longitud de clave inválida")
+    except (OSError, TypeError, ValueError, KeyError, json.JSONDecodeError, UnicodeEncodeError, binascii.Error) as error:
+        raise ValueError("No se pudo cargar la clave externa de simulación.") from error
+    spi = os.getenv("IPSEC_SIM_SPI", "").strip()
+    mode = os.getenv("IPSEC_SIM_MODE", "transport").strip().lower()
+    try:
+        replay_window = int(os.getenv("IPSEC_SIM_REPLAY_WINDOW", "64"))
+        max_message_bytes = int(os.getenv("IPSEC_SIM_MAX_MESSAGE_BYTES", "2048"))
+        sequence_start = int(os.getenv("IPSEC_SIM_SEQUENCE_START", "1"))
+    except ValueError as error:
+        raise ValueError("Los parámetros numéricos de simulación deben ser enteros.") from error
+    settings = IPSecSimulationSettings(key, spi, mode, replay_window, max_message_bytes, sequence_start)
+    try:
+        # Mantiene los errores de configuración fuera de la ruta de procesamiento de paquetes.
+        from .ipsec_sim import IPSecSimulationConfig
+
+        IPSecSimulationConfig(**settings.__dict__)
+    except ValueError as error:
+        raise ValueError("Los parámetros de simulación no son válidos.") from error
+    return settings

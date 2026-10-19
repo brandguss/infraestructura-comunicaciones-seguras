@@ -15,7 +15,10 @@ from .config import (
     load_communication_mode,
     load_tcp_config,
     load_tls_client_config,
+    ipsec_simulation_enabled,
+    load_ipsec_simulation_settings,
 )
+from .ipsec_sim import IPSecSimulationConfig, IPSecSimulator
 
 BUFFER_SIZE: Final = 4096
 TIMEOUT_SECONDS: Final = 5
@@ -80,6 +83,14 @@ def build_authenticated_request(username: str, password: str, operation: str) ->
     return json.dumps({"username": username, "password": password, "operation": operation})
 
 
+def load_ipsec_simulator() -> IPSecSimulator | None:
+    """Crea la capa opcional de simulación a partir de material externo."""
+    if not ipsec_simulation_enabled():
+        return None
+    settings = load_ipsec_simulation_settings()
+    return IPSecSimulator(IPSecSimulationConfig(**settings.__dict__))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Envía un mensaje a un servidor TCP.")
     parser.add_argument("message", nargs="?", help="Texto para el modo de eco compatible.")
@@ -96,6 +107,9 @@ def main() -> None:
             message = build_authenticated_request(args.username, getpass.getpass("Contraseña: "), args.operation)
         if not message:
             parser.error("Indique un mensaje o una operación protegida.")
+        simulator = load_ipsec_simulator()
+        if simulator:
+            message = simulator.encapsulate(message)
         network_config = load_tcp_config()
         if load_communication_mode() == "tls":
             print(send_tls_message(

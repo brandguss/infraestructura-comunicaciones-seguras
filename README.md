@@ -2,11 +2,11 @@
 
 Proyecto académico incremental para representar una infraestructura de comunicaciones seguras en una pequeña organización.
 
-## Etapas 1 a 4: TCP, TLS, autenticación, auditoría y SSH
+## Etapas 1 a 5: TCP, TLS, autenticación, auditoría, SSH e IPSec simulado
 
 El proyecto contiene un servidor y un cliente implementados exclusivamente con la biblioteca estándar de Python. Ambos intercambian texto UTF-8 y una confirmación. Se puede elegir entre TCP sin cifrar, para comparación académica, y TLS real con certificados firmados por una CA de pruebas.
 
-TLS, autenticación, autorización por roles, auditoría y una verificación de administración remota mediante OpenSSH están implementados. IPSec y VPN aún no forman parte del proyecto.
+TLS, autenticación, autorización por roles, auditoría, una verificación de administración remota mediante OpenSSH y una simulación educativa de encapsulado tipo IPSec están implementados. No se implementan IPSec ni VPN reales.
 
 ## Requisitos detectados
 
@@ -27,11 +27,14 @@ src/comunicaciones_seguras/
   auth.py         # Usuarios, scrypt y permisos del servidor
   audit.py        # Auditoría JSON Lines externa
   user_setup.py   # Creador interactivo de usuarios de demostración
+  ipsec_sim.py    # Encapsulado HMAC y ventana anti-replay simulados
+  ipsec_key_setup.py # Generador externo de material de simulación
 tests/
   test_tcp.py     # Pruebas automatizadas locales
   test_tls.py     # Pruebas TLS con PKI externa
   test_auth.py    # Pruebas de autenticación, roles y auditoría
   test_ssh.py     # Configuración y prueba real opcional de OpenSSH
+  test_ipsec_sim.py # Integridad, anti-replay e integración TCP/TLS simuladas
 ```
 
 ## Configuración
@@ -55,6 +58,13 @@ tests/
 | `SSH_TEST_TIMEOUT` | `15` | Límite de conexión y ejecución, entre 1 y 60 segundos. |
 | `SSH_TEST_KNOWN_HOSTS_FILE` | — | Archivo `known_hosts` externo opcional; si se omite se usa el predeterminado de OpenSSH. |
 | `SSH_EXECUTABLE` | `ssh` | Cliente OpenSSH a invocar. |
+| `IPSEC_SIM_ENABLED` | `0` | Activa (`1`) el encapsulado didáctico opcional. |
+| `IPSEC_SIM_KEY_FILE` | — | Archivo externo con la clave simétrica de 32 bytes. |
+| `IPSEC_SIM_SPI` | — | Identificador público de la asociación simulada. |
+| `IPSEC_SIM_MODE` | `transport` | Simulación `transport` o `tunnel`. |
+| `IPSEC_SIM_REPLAY_WINDOW` | `64` | Ventana anti-replay, entre 1 y 1024. |
+| `IPSEC_SIM_MAX_MESSAGE_BYTES` | `2048` | Máximo de carga UTF-8 protegida. |
+| `IPSEC_SIM_SEQUENCE_START` | `1` | Primera secuencia del emisor para la asociación actual. |
 
 TLS exige CA explícita, validación del certificado, validación de hostname y TLS 1.2 o superior. No existe un modo para desactivar estas comprobaciones.
 
@@ -79,7 +89,43 @@ $env:AUDIT_LOG_FILE = Join-Path $auth "audit.jsonl"
 python -m src.comunicaciones_seguras.user_setup
 ```
 
-La utilidad solicita contraseñas sin mostrarlas y solo persiste sales y hashes scrypt. No use `--overwrite` salvo que desee reemplazar deliberadamente el archivo externo. Las claves, hashes, sales y auditorías no deben subirse a GitHub.
+La utilidad solicita contraseñas sin mostrarlas y solo persiste sales y hashes scrypt. Las claves, hashes, sales y auditorías no deben subirse a GitHub.
+
+## Simulación educativa de encapsulamiento tipo IPSec
+
+Esta etapa representa conceptos de asociación de seguridad, encapsulado, HMAC-SHA256 y anti-replay. No crea paquetes IP, políticas del kernel, IKE, ESP/AH, rutas, interfaces virtuales ni una VPN real. La carga no se cifra mediante esta simulación; use TLS para confidencialidad y validación real del servidor.
+
+El paquete JSON canónico contiene versión, modo, SPI, secuencia y carga. En modo `transport` protege una carga interna; en modo `tunnel` añade encabezados lógico externo e interno. HMAC-SHA256 cubre todos esos campos y se comprueba con comparación segura antes de modificar la ventana anti-replay. La ventana sincronizada rechaza duplicados y secuencias demasiado antiguas, pero permite llegadas fuera de orden dentro de su tamaño configurado.
+
+Genere el material externo de 32 bytes; la utilidad usa `secrets.token_bytes(32)`, nunca muestra la clave y rechaza rutas dentro del repositorio. La creación es exclusiva: no reemplaza un archivo existente.
+
+```powershell
+$ipsec = Join-Path $env:USERPROFILE ".infraestructura-comunicaciones-seguras\ipsec"
+$env:IPSEC_SIM_KEY_FILE = Join-Path $ipsec "ipsec_sim_key.json"
+python -m src.comunicaciones_seguras.ipsec_key_setup
+```
+
+Para usar la misma asociación de simulación en cliente y servidor, configure las variables en ambas terminales. El SPI no es secreto, pero debe ser nuevo al reiniciar un emisor o receptor para no reutilizar secuencias con una ventana anti-replay temporal:
+
+```powershell
+$env:IPSEC_SIM_ENABLED = "1"
+$env:IPSEC_SIM_KEY_FILE = Join-Path $env:USERPROFILE ".infraestructura-comunicaciones-seguras\ipsec\ipsec_sim_key.json"
+$env:IPSEC_SIM_SPI = "laboratorio-2026-01"
+$env:IPSEC_SIM_MODE = "transport" # o tunnel
+$env:IPSEC_SIM_REPLAY_WINDOW = "64"
+```
+
+Inicie el servidor TCP o TLS como en las etapas previas y ejecute el cliente normalmente. Al activar la simulación, el servidor requiere un `AUDIT_LOG_FILE` externo y que pueda abrirse al inicio; si no puede garantizarlo, no inicia en modo IPSec. Los rechazos de encapsulado se auditan como motivos técnicos, sin claves, etiquetas HMAC ni carga. La funcionalidad está desactivada sin `IPSEC_SIM_ENABLED=1`, de modo que TCP/TLS existentes conservan su comportamiento.
+
+En Windows, la protección efectiva del archivo depende de las ACL del directorio externo. Cree el directorio bajo el perfil del usuario y compruebe que no conceda acceso a otros usuarios antes de generar la clave:
+
+```powershell
+icacls $ipsec
+```
+
+La utilidad solicita creación exclusiva y gestiona errores de permiso sin mostrar material criptográfico; no modifica las ACL porque son una decisión de administración del equipo.
+
+El estado anti-replay existe solo en memoria. Tras reiniciar cualquiera de los pares, cree una asociación simulada nueva: use un SPI nuevo y, para el laboratorio, genere material nuevo o coordine de forma explícita una secuencia inicial no reutilizada. No almacene ese estado ni la clave en este repositorio.
 
 ## Administración remota segura mediante SSH
 
@@ -265,6 +311,13 @@ Si falta el material externo, las pruebas TLS de certificado se marcarán como `
 
 Las pruebas de autenticación crean usuarios, hashes y auditorías solo en un directorio temporal que se elimina al finalizar; no necesitan credenciales externas.
 
+Las pruebas de la simulación IPSec usan claves aleatorias temporales. La integración TLS de esa simulación se marca como `skipped` si falta la PKI externa:
+
+```powershell
+python -m unittest tests.test_ipsec_sim -v
+python -m unittest discover -s tests -p "test*.py" -v
+```
+
 La prueba SSH de integración está deshabilitada por defecto. Ejecute primero sus pruebas unitarias y después habilítela con las variables de la sección SSH:
 
 ```powershell
@@ -275,4 +328,4 @@ python -m unittest discover -s tests -v
 
 ## Seguridad y siguientes etapas
 
-TCP transmite el contenido en claro; no debe utilizarse con datos sensibles. TLS protege el canal y verifica la identidad del servidor con una CA explícita; la autenticación de aplicación no lo sustituye. SSH se limita a la administración remota y no implementa IPSec ni VPN. Las claves privadas, hashes, sales y auditorías no se versionan ni se suben a GitHub.
+TCP transmite el contenido en claro; no debe utilizarse con datos sensibles. TLS protege el canal y verifica la identidad del servidor con una CA explícita; la autenticación de aplicación no lo sustituye. SSH se limita a la administración remota. El encapsulado tipo IPSec es una simulación didáctica y no una VPN ni IPSec reales. Las claves privadas, hashes, sales y auditorías no se versionan ni se suben a GitHub.
