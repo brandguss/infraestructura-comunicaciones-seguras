@@ -2,17 +2,29 @@
 
 Esta guía te lleva desde la preparación de Windows hasta la comprobación de cada parte del proyecto. Primero se prueban las comunicaciones en una sola computadora; después se preparan los certificados, los usuarios, la auditoría, la simulación IPsec y la integración SSH. Cada bloque explica para qué sirve, qué debe pasar en pantalla y cómo interpretar un error. Los archivos que contienen claves y datos de usuarios se guardan fuera del repositorio para evitar que terminen publicados en GitHub.
 
-## 1. Abrir el proyecto y comprobar Python
+## 1. Descargar el proyecto y comprobar Python
 
-Abre dos terminales de PowerShell en VS Code. La primera se usará normalmente para mantener el servidor en ejecución y la segunda para lanzar el cliente o las pruebas. El comando `Set-Location` coloca la terminal dentro del proyecto, mientras que `python --version` confirma que Windows encuentra Python y `git status --short` permite ver si hay cambios locales pendientes.
+Si todavía no tienes el proyecto en tu computadora, abre PowerShell y ejecuta estos comandos. Se descargará una copia en la carpeta Documentos del usuario. Si ya lo descargaste, omite el comando `git clone` y usa la ruta donde guardaste el repositorio.
 
 ```powershell
-Set-Location "$env:USERPROFILE\OneDrive\Documentos\SDI\infraestructura-comunicaciones-seguras"
+Set-Location "$env:USERPROFILE\Documents"
+git clone https://github.com/brandguss/infraestructura-comunicaciones-seguras.git
+$project = Join-Path $env:USERPROFILE "Documents\infraestructura-comunicaciones-seguras"
+Set-Location $project
 python --version
 git status --short
 ```
 
-Se requiere Python 3.13 o una versión compatible. Si `python` no se reconoce, instala Python desde python.org y marca **Add Python to PATH**; después cierra y vuelve a abrir VS Code. El comando `git status --short` debe mostrar los cambios locales, si existen.
+**Resultado esperado:** `git clone` termina sin errores y crea la carpeta del proyecto; `python --version` muestra Python 3.13 o una versión compatible. `git status --short` puede no mostrar nada si no hay cambios locales. Si ya tienes el proyecto en otra ubicación, sustituye la ruta asignada a `$project` por la carpeta real del repositorio.
+
+Abre dos terminales de PowerShell en VS Code. En cada terminal nueva, entra a la carpeta del proyecto antes de ejecutar los comandos de los siguientes pasos:
+
+```powershell
+$project = Join-Path $env:USERPROFILE "Documents\infraestructura-comunicaciones-seguras"
+Set-Location $project
+```
+
+Si `python` no se reconoce, instala Python desde python.org y marca **Add Python to PATH**; después cierra y vuelve a abrir VS Code. No necesitas instalar paquetes externos de Python para ejecutar las pruebas actuales, porque se utiliza la biblioteca estándar.
 
 No necesitas instalar paquetes externos de Python para ejecutar las pruebas actuales, porque se utiliza la biblioteca estándar. El siguiente comando busca los archivos de prueba dentro de `tests` y ejecuta cada caso encontrado. Sirve como primera comprobación: si falla aquí, conviene resolver ese error antes de iniciar servidores o configurar la red.
 
@@ -84,7 +96,8 @@ Esta primera ejecución comprueba que cliente y servidor pueden intercambiar dat
 **Terminal 1 — servidor:**
 
 ```powershell
-Set-Location "$env:USERPROFILE\OneDrive\Documentos\SDI\infraestructura-comunicaciones-seguras"
+$project = Join-Path $env:USERPROFILE "Documents\infraestructura-comunicaciones-seguras"
+Set-Location $project
 $env:COMMUNICATION_MODE = "tcp"
 $env:TCP_HOST = "127.0.0.1"
 $env:TCP_PORT = "5000"
@@ -96,7 +109,8 @@ Déjala abierta mientras haces la prueba.
 **Terminal 2 — cliente:**
 
 ```powershell
-Set-Location "$env:USERPROFILE\OneDrive\Documentos\SDI\infraestructura-comunicaciones-seguras"
+$project = Join-Path $env:USERPROFILE "Documents\infraestructura-comunicaciones-seguras"
+Set-Location $project
 $env:COMMUNICATION_MODE = "tcp"
 $env:TCP_HOST = "127.0.0.1"
 $env:TCP_PORT = "5000"
@@ -110,7 +124,8 @@ Debe aparecer una respuesta que comienza con `RECIBIDO:`. Para detener el servid
 **Terminal 1 — servidor TLS:**
 
 ```powershell
-Set-Location "$env:USERPROFILE\OneDrive\Documentos\SDI\infraestructura-comunicaciones-seguras"
+$project = Join-Path $env:USERPROFILE "Documents\infraestructura-comunicaciones-seguras"
+Set-Location $project
 $pki = Join-Path $env:USERPROFILE ".infraestructura-comunicaciones-seguras\pki"
 $env:COMMUNICATION_MODE = "tls"
 $env:TCP_HOST = "127.0.0.1"
@@ -123,7 +138,8 @@ python -m src.comunicaciones_seguras.tcp_server
 **Terminal 2 — cliente TLS:**
 
 ```powershell
-Set-Location "$env:USERPROFILE\OneDrive\Documentos\SDI\infraestructura-comunicaciones-seguras"
+$project = Join-Path $env:USERPROFILE "Documents\infraestructura-comunicaciones-seguras"
+Set-Location $project
 $pki = Join-Path $env:USERPROFILE ".infraestructura-comunicaciones-seguras\pki"
 $env:COMMUNICATION_MODE = "tls"
 $env:TCP_HOST = "127.0.0.1"
