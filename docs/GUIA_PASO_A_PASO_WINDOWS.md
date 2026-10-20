@@ -331,3 +331,54 @@ git diff
 ```
 
 Antes de hacer commit, revisa que no haya archivos `.key`, `.pem`, usuarios, auditorías ni claves de simulación dentro del repositorio. Esta guía describe un laboratorio académico; no es una certificación de seguridad ni una receta de despliegue en producción.
+
+
+## 15. Comprobación final de los requisitos
+
+Cuando hayas terminado las secciones anteriores, ejecuta las comprobaciones en este orden. La idea es confirmar cada función por separado y conservar una evidencia clara, en vez de asumir que todo funciona porque el servidor inició sin errores.
+
+Primero ejecuta las pruebas unitarias de TCP, autenticación, autorización y simulación IPsec. El comando debe terminar con `OK`; cualquier `FAIL` o `ERROR` significa que hay que revisar el caso que aparece unas líneas antes del resumen. Una prueba marcada como `skipped` no se ejecutó y debe explicarse en la entrega.
+
+```powershell
+python -m unittest discover -s tests -p "test*.py" -v
+```
+
+Después, en la misma terminal, define las rutas de los certificados que generaste y ejecuta nuevamente la suite. Esta segunda ejecución permite comprobar los casos TLS que dependen de archivos externos, incluido el rechazo de una CA no confiable.
+
+```powershell
+$pki = Join-Path $env:USERPROFILE ".infraestructura-comunicaciones-seguras\pki"
+$env:TLS_TEST_CA_FILE = "$pki\ca\root-ca.crt"
+$env:TLS_TEST_CERT_FILE = "$pki\server\server.crt"
+$env:TLS_TEST_KEY_FILE = "$pki\server\server.key"
+$env:TLS_TEST_SERVER_NAME = "localhost"
+$env:TLS_TEST_UNTRUSTED_CA_FILE = "$pki\untrusted-ca\other-ca.crt"
+python -m unittest discover -s tests -p "test*.py" -v
+```
+
+En la salida, confirma que no haya fallos y que la prueba de certificado no confiable ya no aparezca como omitida. Si una prueba TLS falla, comprueba las rutas, la vigencia del certificado y que el certificado incluya el nombre utilizado por el cliente.
+
+La siguiente tabla sirve para relacionar cada requisito con una prueba observable. Marca cada fila únicamente después de haber obtenido el resultado indicado.
+
+| Requisito | Prueba que debes ejecutar | Resultado que confirma la función |
+|---|---|---|
+| Comunicación TCP | Sección 4, cliente y servidor en terminales separadas | El cliente recibe la respuesta `RECIBIDO:`. |
+| Comunicación cifrada TLS | Sección 5, usando la CA de laboratorio | El cliente valida el certificado y recibe la respuesta. |
+| Validación de identidad del servidor | Pruebas TLS con `TLS_TEST_SERVER_NAME=localhost` | La conexión con el nombre correcto funciona; la prueba de nombre incorrecto es rechazada. |
+| Rechazo de una CA no confiable | Pruebas TLS con `TLS_TEST_UNTRUSTED_CA_FILE` | El caso de certificado no confiable se ejecuta y pasa al comprobar el rechazo. |
+| Autenticación | Sección 6 y prueba con una cuenta existente | Una contraseña válida permite autenticarse; una inválida no debe autorizar la operación. |
+| Autorización por rol | Sección 6, primero `admin_info` como `admin`, luego `list_resources` como `consulta` | La operación permitida se acepta y la operación sin permisos se rechaza. |
+| Auditoría | Inspecciona `$auth\audit.jsonl` después de las dos operaciones | Se guardan eventos relevantes y no aparecen contraseñas. |
+| Simulación IPsec | Sección 8 y pruebas `test_ipsec_sim.py` | Pasan las pruebas de integridad, modo configurado y anti-replay que define el módulo. Esto no prueba una VPN real. |
+| Integración SSH | Sección 9, solo después de autorizar la clave pública y confiar en el host | La prueba de integración termina correctamente sin desactivar la validación de la identidad del servidor. |
+| VPN sitio a sitio | Guía `VPN_IPSEC_REAL_STRONGSWAN.md`, dos gateways y hosts en ambas LAN | El túnel se establece, aumentan los contadores de tráfico y los hosts de ambas subredes se comunican. |
+| VPN de acceso remoto | Guía `VPN_IPSEC_REAL_STRONGSWAN.md`, cliente y gateway configurados | El usuario se autentica, recibe una IP del pool y llega solo a los recursos autorizados. |
+
+Las pruebas de TCP, TLS, usuarios, permisos y simulación se pueden ejecutar en la misma computadora. SSH necesita una cuenta y una clave autorizadas. Las VPN necesitan máquinas o gateways con redes reales; no es posible demostrar esos dos requisitos con solo ejecutar `unittest` en una computadora. Si no tienes dos gateways, deja documentado que la guía de configuración está preparada pero el túnel no se ha validado físicamente, en lugar de presentar una prueba de simulación como si fuera una conexión VPN.
+
+Para guardar un resumen de la suite en un archivo de evidencia, puedes ejecutar:
+
+```powershell
+python -m unittest discover -s tests -p "test*.py" -v 2>&1 | Tee-Object -FilePath ".\resultado_pruebas.txt"
+```
+
+El archivo `resultado_pruebas.txt` contiene la salida de la ejecución y se puede revisar junto con las capturas de las terminales. Antes de publicarlo, comprueba que no incluya rutas privadas que no quieras compartir ni datos sensibles.
