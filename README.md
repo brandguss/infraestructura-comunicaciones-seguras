@@ -2,10 +2,24 @@
 
 Este proyecto reúne ejemplos prácticos de comunicaciones TCP y TLS, certificados digitales, control de acceso por usuarios y roles, registro de actividad y ejercicios de IPsec y SSH. Las instrucciones permiten preparar el entorno, ejecutar los componentes y comprobar los resultados desde la terminal.
 
-**Guías del proyecto:**
+## Por dónde empezar
 
-- [Instalación y ejecución paso a paso en Windows/PowerShell](docs/GUIA_PASO_A_PASO_WINDOWS.md): terminales separadas, certificados, usuarios, pruebas, solución de problemas y evidencias.
-- [Guía de IPsec real con strongSwan](docs/VPN_IPSEC_REAL_STRONGSWAN.md): plantilla de laboratorio sitio a sitio, comandos de Linux, forwarding, firewall y comprobaciones. Requiere dos gateways Linux y adaptar todas las direcciones y secretos al laboratorio.
+Sigue los pasos en este orden. La guía principal contiene los comandos completos para copiar en PowerShell, explica qué hace cada comando y muestra qué resultado debes revisar antes de avanzar.
+
+1. **Prepara el equipo y abre el proyecto.** Instala Python, Git y OpenSSL; clona el repositorio y comprueba que Python funcione. Sigue la [Guía paso a paso para Windows y PowerShell](docs/GUIA_PASO_A_PASO_WINDOWS.md).
+2. **Ejecuta primero TCP.** Abre dos terminales: inicia el servidor en la primera y envía un mensaje desde el cliente en la segunda. Confirma que la respuesta empiece con `RECIBIDO:`.
+3. **Prepara los certificados y prueba TLS.** En la guía principal, sigue la sección de creación de la CA y del certificado del servidor. Inicia el servidor y el cliente con TLS; después ejecuta las pruebas de certificado válido, nombre incorrecto y CA no confiable.
+4. **Configura los usuarios y permisos.** Crea las cuentas de laboratorio, inicia el servidor con las rutas de usuarios y auditoría correctas y prueba una operación permitida y otra denegada por el rol.
+5. **Comprueba la auditoría y la simulación IPsec.** Revisa el archivo de eventos y ejecuta las pruebas automatizadas del módulo IPsec simulado, incluida la detección de mensajes repetidos.
+6. **Configura SSH si vas a demostrar la integración real.** Sigue la sección SSH de la guía principal. Necesitas OpenSSH, un usuario permitido, una clave pública autorizada y la clave de host verificada.
+7. **Ejecuta toda la suite y registra los resultados.** Usa la sección de comprobación final de la guía para volver a ejecutar las pruebas, identificar casos omitidos y guardar la salida.
+8. **Si el proyecto exige una VPN real, prepara los gateways aparte.** Consulta la [Guía de IPsec real con strongSwan](docs/VPN_IPSEC_REAL_STRONGSWAN.md). Incluye ejemplos para VPN sitio a sitio y acceso remoto, pero requiere gateways y redes de laboratorio; no se activa al ejecutar el programa Python.
+
+**Guías completas:**
+
+- [Guía principal: instalación, terminales, certificados, TCP/TLS, usuarios, permisos, auditoría, SSH, pruebas y solución de problemas](docs/GUIA_PASO_A_PASO_WINDOWS.md)
+- [Guía de VPN IPsec real: sitio a sitio y acceso remoto con strongSwan](docs/VPN_IPSEC_REAL_STRONGSWAN.md)
+
 
 El programa de Python permite ejecutar y probar las funciones de TCP/TLS, validación de certificados, usuarios, permisos y auditoría. El módulo llamado IPsec es una simulación didáctica que sirve para observar la integridad y el control anti-replay desde la aplicación; el túnel IPsec del sistema operativo se prepara por separado con la guía de strongSwan. La prueba SSH utiliza OpenSSH y necesita una cuenta y una clave autorizada.
 
