@@ -188,19 +188,6 @@ El módulo `ipsec_sim.py` representa conceptos de encapsulación, autenticación
 
 Para probar una VPN real, configura strongSwan u otra implementación IPsec en los gateways, define direcciones, subredes, autenticación, rutas y reglas de firewall, y verifica que los paquetes de prueba pasen por el túnel. La guía de VPN proporciona ejemplos de configuración que deben adaptarse al laboratorio. La prueba de acceso remoto y la prueba sitio a sitio son escenarios diferentes.
 
-## 12. Lista de verificación para la entrega
-
-- [ ] El servidor TCP inicia y el cliente recibe la respuesta esperada.
-- [ ] La conexión TLS funciona con el certificado correcto.
-- [ ] TLS rechaza un nombre de servidor incorrecto y una CA no confiable.
-- [ ] La autenticación distingue credenciales válidas e inválidas.
-- [ ] La autorización permite o rechaza operaciones según el rol.
-- [ ] La auditoría registra los resultados sin almacenar contraseñas.
-- [ ] Las pruebas de la simulación IPsec, incluida la protección anti-replay, pasan.
-- [ ] La suite completa termina sin fallos; los casos omitidos están identificados.
-- [ ] La prueba SSH se ejecuta si el entorno de integración está configurado.
-- [ ] La VPN real se marca como comprobada solo después de establecer el túnel y validar tráfico entre redes.
-
 ## 13. Notas para reproducir los resultados
 
 Las pruebas locales de TCP, TLS, autenticación y simulación se pueden ejecutar en una computadora. La integración SSH requiere un servidor y credenciales configurados. Una VPN real requiere dos extremos de red y su configuración. Guarda las salidas y capturas de cada comprobación para que se pueda identificar qué parte del proyecto se ejecutó y cuál depende de infraestructura externa.
