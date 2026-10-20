@@ -1,13 +1,13 @@
 # Infraestructura de comunicaciones seguras
 
-Proyecto académico en Python para estudiar comunicaciones TCP/TLS, certificados y confianza, autenticación y autorización por roles, auditoría, administración remota por OpenSSH y conceptos de encapsulación tipo IPsec.
+Este proyecto reúne ejemplos prácticos de comunicaciones TCP y TLS, certificados digitales, control de acceso por usuarios y roles, registro de actividad y ejercicios de IPsec y SSH. Las instrucciones permiten preparar el entorno, ejecutar los componentes y comprobar los resultados desde la terminal.
 
 **Guías del proyecto:**
 
 - [Instalación y ejecución paso a paso en Windows/PowerShell](docs/GUIA_PASO_A_PASO_WINDOWS.md): terminales separadas, certificados, usuarios, pruebas, solución de problemas y evidencias.
 - [Guía de IPsec real con strongSwan](docs/VPN_IPSEC_REAL_STRONGSWAN.md): plantilla de laboratorio sitio a sitio, comandos de Linux, forwarding, firewall y comprobaciones. Requiere dos gateways Linux y adaptar todas las direcciones y secretos al laboratorio.
 
-> **Alcance real:** TCP/TLS, validación de certificados, autenticación/autorización, auditoría y la simulación IPsec están implementados en código. SSH se prueba mediante OpenSSH del sistema cuando se configura. La simulación IPsec no es el protocolo IPsec del sistema operativo y no crea una VPN. Los escenarios de VPN de acceso remoto y sitio a sitio requieren gateways y túneles reales que este repositorio no configura. No presentar la simulación como una VPN real.
+El programa de Python permite ejecutar y probar las funciones de TCP/TLS, validación de certificados, usuarios, permisos y auditoría. El módulo llamado IPsec es una simulación didáctica que sirve para observar la integridad y el control anti-replay desde la aplicación; el túnel IPsec del sistema operativo se prepara por separado con la guía de strongSwan. La prueba SSH utiliza OpenSSH y necesita una cuenta y una clave autorizada.
 
 ## 1. Requisitos
 
@@ -79,7 +79,7 @@ La respuesta debe comenzar con `RECIBIDO:`. TCP sin cifrar se incluye para compa
 | VPN sitio a sitio | No se crea túnel real | Se explica la arquitectura; requiere dos gateways, rutas y políticas reales. |
 | Pruebas automatizadas | `unittest` | Suite local; las pruebas de integración necesitan preparación externa. |
 
-Esta tabla distingue explícitamente código ejecutable, integración dependiente del entorno, simulación y arquitectura conceptual. La documentación de un escenario no equivale a demostrar un túnel real.
+Las pruebas se realizan en el entorno indicado en cada fila. Para SSH se necesita un servidor OpenSSH configurado; para comprobar una VPN se necesitan dos extremos de red y tráfico pasando por el túnel.
 
 ## 5. Estructura del repositorio
 
@@ -192,6 +192,4 @@ python -m unittest discover -s tests -p "test*.py" -v
 8. SSH real solo si se configuró el servidor, usuario, clave y confianza del host.
 9. VPN real solo con un túnel externo configurado y comprobado; no usar la simulación como evidencia de túnel.
 
-## 11. Licencia y uso
-
-Este repositorio es un laboratorio académico. No despliegues sus servicios directamente en producción sin un diseño de amenazas, revisión de código, pruebas de seguridad, manejo de secretos, controles operativos y una implementación VPN real si el requisito la exige.
+El proyecto se preparó como práctica de laboratorio. Para reproducir los resultados, sigue las instrucciones en orden, utiliza certificados y claves de prueba fuera de la carpeta del repositorio y guarda las evidencias de cada comprobación. Las pruebas de la aplicación y las pruebas de la VPN se ejecutan por separado, ya que validan componentes diferentes.
