@@ -43,9 +43,12 @@ $openssl = if (Get-Command openssl -ErrorAction SilentlyContinue) { "openssl" } 
 & $openssl version
 ```
 
-Genera una CA de laboratorio y una clave/certificado de servidor con SAN para `localhost` y `127.0.0.1`:
+Genera una CA de laboratorio y una clave/certificado de servidor con SAN para `localhost` y `127.0.0.1`. Antes de generar, comprueba que los nombres no existan: OpenSSL puede sobrescribir archivos de clave existentes.
 
 ```powershell
+$protectedFiles = @("$pki\\ca\\root-ca.key", "$pki\\ca\\root-ca.crt", "$pki\\server\\server.key", "$pki\\server\\server.csr", "$pki\\server\\server.crt", "$pki\\untrusted-ca\\other-ca.key", "$pki\\untrusted-ca\\other-ca.crt")
+$existingFiles = $protectedFiles | Where-Object { Test-Path $_ }
+if ($existingFiles) { throw "Ya existen archivos PKI; no los sobrescribas. Usa una carpeta de laboratorio nueva o revisa los archivos existentes." }
 & $openssl genrsa -out "$pki\ca\root-ca.key" 4096
 & $openssl req -x509 -new -sha256 -key "$pki\ca\root-ca.key" -days 3650 -out "$pki\ca\root-ca.crt" -subj "/CN=CA raiz academica" -addext "basicConstraints=critical,CA:TRUE,pathlen:0" -addext "keyUsage=critical,keyCertSign,cRLSign"
 & $openssl genrsa -out "$pki\server\server.key" 2048
@@ -267,7 +270,7 @@ $env:SSH_TEST_USER = "$env:USERNAME"
 $env:SSH_TEST_PRIVATE_KEY_FILE = Join-Path $env:USERPROFILE ".ssh\id_ed25519_sdi"
 $env:SSH_TEST_PORT = "22"
 $env:SSH_TEST_TIMEOUT = "15"
-python -m unittest tests.test_ssh.SSHIntegrationTests -v
+python -m unittest discover -s tests -p "test_ssh.py" -v
 ```
 
 Si no se ha preparado la clave, el usuario remoto o la confianza del host, deja la prueba deshabilitada; la suite de pruebas unitarias de configuración seguirá siendo ejecutable. No es seguro desactivar la comprobación de identidad del servidor solo para que pase el test.
