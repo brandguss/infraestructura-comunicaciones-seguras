@@ -2,10 +2,14 @@
 
 Proyecto en Python para practicar comunicaciones TCP, conexiones TLS con certificados digitales, autenticación y autorización por roles, auditoría, administración remota mediante SSH y conceptos de IPsec. Incluye pruebas automatizadas y guías para preparar el entorno y verificar los resultados.
 
-## Guías del proyecto
+## Guías del proyecto: cuál seguir y en qué orden
 
-- **[Guía principal: instalación y ejecución paso a paso](docs/GUIA_PASO_A_PASO_WINDOWS.md)**. Explica qué instalar, qué comando ejecutar en cada terminal, para qué sirve cada paso, qué resultado esperar y cómo resolver errores. Incluye TCP, TLS, certificados, usuarios, permisos, auditoría, SSH y pruebas.
-- **[Guía de VPN IPsec con strongSwan](docs/VPN_IPSEC_REAL_STRONGSWAN.md)**. Contiene ejemplos para VPN sitio a sitio y acceso remoto, junto con configuración de gateways, forwarding, firewall y comprobaciones del túnel.
+**Empieza por la guía principal y sigue sus pasos en el orden indicado, desde el paso 1 hasta el final.** No necesitas leer ni ejecutar primero la guía de VPN.
+
+1. **[Guía principal: instalación y ejecución paso a paso](docs/GUIA_PASO_A_PASO_WINDOWS.md)** — es el recorrido principal del proyecto. Sigue los pasos en orden; cada etapa explica qué preparar, qué comando ejecutar, qué resultado esperar y cómo comprobar si puedes continuar. Incluye TCP, TLS, certificados, usuarios, permisos, auditoría, SSH y pruebas. Si una prueba falla, detente en ese paso y revisa su solución antes de avanzar.
+2. **[Guía complementaria: VPN IPsec con strongSwan](docs/VPN_IPSEC_REAL_STRONGSWAN.md)** — consúltala únicamente para configurar y comprobar una VPN IPsec real en gateways compatibles, si tu práctica requiere ese escenario. Es una configuración adicional que depende de equipos/redes y herramientas externas; no es necesaria para ejecutar las pruebas locales básicas y el programa Python no crea el túnel automáticamente.
+
+**Importante:** las pruebas locales pueden ejecutarse en una computadora, pero no demuestran por sí solas la comunicación entre dos computadoras, la integración SSH real ni una VPN real. La guía principal indica cuándo interviene una configuración externa. Registra como comprobado únicamente aquello que hayas ejecutado y verificado.
 
 ## Arquitectura y objetivo de cada mecanismo
 
