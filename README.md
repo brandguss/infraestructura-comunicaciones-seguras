@@ -1,62 +1,100 @@
 # Infraestructura de comunicaciones seguras
 
-Este proyecto reúne ejemplos prácticos de comunicaciones TCP y TLS, certificados digitales, control de acceso por usuarios y roles, registro de actividad y ejercicios de IPsec y SSH. Las instrucciones permiten preparar el entorno, ejecutar los componentes y comprobar los resultados desde la terminal.
+Proyecto en Python para practicar comunicaciones TCP, conexiones TLS con certificados digitales, autenticación y autorización por roles, auditoría, administración remota mediante SSH y conceptos de IPsec. Incluye pruebas automatizadas y guías para preparar el entorno y verificar los resultados.
 
-## Por dónde empezar
+## Guías del proyecto
 
-Sigue los pasos en este orden. La guía principal contiene los comandos completos para copiar en PowerShell, explica qué hace cada comando y muestra qué resultado debes revisar antes de avanzar.
+- **[Guía principal: instalación y ejecución paso a paso](docs/GUIA_PASO_A_PASO_WINDOWS.md)**. Explica qué instalar, qué comando ejecutar en cada terminal, para qué sirve cada paso, qué resultado esperar y cómo resolver errores. Incluye TCP, TLS, certificados, usuarios, permisos, auditoría, SSH y pruebas.
+- **[Guía de VPN IPsec con strongSwan](docs/VPN_IPSEC_REAL_STRONGSWAN.md)**. Contiene ejemplos para VPN sitio a sitio y acceso remoto, junto con configuración de gateways, forwarding, firewall y comprobaciones del túnel.
 
-1. **Prepara el equipo y abre el proyecto.** Instala Python, Git y OpenSSL; clona el repositorio y comprueba que Python funcione. Sigue la [Guía paso a paso para Windows y PowerShell](docs/GUIA_PASO_A_PASO_WINDOWS.md).
-2. **Ejecuta primero TCP.** Abre dos terminales: inicia el servidor en la primera y envía un mensaje desde el cliente en la segunda. Confirma que la respuesta empiece con `RECIBIDO:`.
-3. **Prepara los certificados y prueba TLS.** En la guía principal, sigue la sección de creación de la CA y del certificado del servidor. Inicia el servidor y el cliente con TLS; después ejecuta las pruebas de certificado válido, nombre incorrecto y CA no confiable.
-4. **Configura los usuarios y permisos.** Crea las cuentas de laboratorio, inicia el servidor con las rutas de usuarios y auditoría correctas y prueba una operación permitida y otra denegada por el rol.
-5. **Comprueba la auditoría y la simulación IPsec.** Revisa el archivo de eventos y ejecuta las pruebas automatizadas del módulo IPsec simulado, incluida la detección de mensajes repetidos.
-6. **Configura SSH si vas a demostrar la integración real.** Sigue la sección SSH de la guía principal. Necesitas OpenSSH, un usuario permitido, una clave pública autorizada y la clave de host verificada.
-7. **Ejecuta toda la suite y registra los resultados.** Usa la sección de comprobación final de la guía para volver a ejecutar las pruebas, identificar casos omitidos y guardar la salida.
-8. **Si el proyecto exige una VPN real, prepara los gateways aparte.** Consulta la [Guía de IPsec real con strongSwan](docs/VPN_IPSEC_REAL_STRONGSWAN.md). Incluye ejemplos para VPN sitio a sitio y acceso remoto, pero requiere gateways y redes de laboratorio; no se activa al ejecutar el programa Python.
+## 1. Tecnologías y herramientas utilizadas
 
-**Guías completas:**
+| Tecnología o herramienta | Uso en el proyecto |
+|---|---|
+| **Python 3.13** | Lenguaje principal de la aplicación y de las pruebas automatizadas. |
+| **Sockets TCP (`socket`)** | Comunicación entre cliente y servidor. |
+| **TLS/SSL (`ssl`)** | Protección de la conexión, negociación TLS y validación del certificado del servidor. |
+| **Certificados X.509 y CA** | Identificación del servidor y verificación de confianza en las pruebas TLS. |
+| **OpenSSL** | Generación de la CA de laboratorio, certificados, claves y certificados de prueba. Es una herramienta externa, no un paquete de Python. |
+| **JSON (`json`)** | Formato de los mensajes de operaciones protegidas, los paquetes de la simulación y los registros de auditoría. |
+| **HMAC-SHA256 (`hmac`, `hashlib`)** | Verificación de integridad y autenticidad en la simulación didáctica de IPsec. |
+| **Base64 (`base64`)** | Codificación del contenido de los paquetes simulados. No es cifrado. |
+| **Scrypt (`hashlib.scrypt`)** | Derivación de hashes para almacenar contraseñas de los usuarios de prueba. |
+| **Hilos y bloqueos (`threading`)** | Coordinación de las pruebas de conexión y control del estado anti-replay de la simulación. |
+| **OpenSSH** | Cliente/servidor SSH para la prueba de integración remota, si se configura el entorno necesario. |
+| **strongSwan / IPsec** | Herramienta opcional para configurar una VPN real en gateways Linux siguiendo la guía correspondiente. No se instala ni se inicia desde el programa Python. |
+| **Git y GitHub** | Control de versiones, alojamiento del código y ejecución de la suite automatizada mediante GitHub Actions. |
+| **PowerShell** | Terminal utilizada en los pasos de instalación y pruebas de Windows. |
 
-- [Guía principal: instalación, terminales, certificados, TCP/TLS, usuarios, permisos, auditoría, SSH, pruebas y solución de problemas](docs/GUIA_PASO_A_PASO_WINDOWS.md)
-- [Guía de VPN IPsec real: sitio a sitio y acceso remoto con strongSwan](docs/VPN_IPSEC_REAL_STRONGSWAN.md)
+## 2. Paquetes y dependencias de Python
 
+El proyecto utiliza la **biblioteca estándar de Python**; no necesita instalar paquetes externos con `pip` para ejecutar la aplicación y las pruebas actuales. Los módulos principales son:
 
-El programa de Python permite ejecutar y probar las funciones de TCP/TLS, validación de certificados, usuarios, permisos y auditoría. El módulo llamado IPsec es una simulación didáctica que sirve para observar la integridad y el control anti-replay desde la aplicación; el túnel IPsec del sistema operativo se prepara por separado con la guía de strongSwan. La prueba SSH utiliza OpenSSH y necesita una cuenta y una clave autorizada.
+| Módulo | Para qué se utiliza |
+|---|---|
+| `socket` | Crear conexiones TCP y escuchar conexiones entrantes. |
+| `ssl` | Crear contextos TLS y comprobar certificados y nombres de servidor. |
+| `json` | Serializar y analizar solicitudes, respuestas y paquetes de la simulación. |
+| `hashlib` | Calcular SHA-256 y derivar hashes de contraseñas con Scrypt. |
+| `hmac` | Calcular y verificar etiquetas de autenticación en la simulación IPsec. |
+| `base64` | Codificar y decodificar contenido de los paquetes simulados. |
+| `threading` | Ejecutar partes de las pruebas de conexión y proteger secciones críticas. |
+| `argparse` | Procesar argumentos del cliente desde la terminal. |
+| `getpass` | Solicitar contraseñas sin mostrarlas en pantalla. |
+| `logging` | Informar de conexiones, errores y eventos operativos. |
+| `unittest` | Ejecutar las pruebas automáticas sin instalar un framework de pruebas externo. |
+| `pathlib`, `os`, `dataclasses`, `typing` | Manejar rutas, variables de entorno, configuración y tipos de datos. |
 
-## 1. Requisitos
+No existe un archivo `requirements.txt` porque no hay dependencias de terceros de Python que instalar para el funcionamiento actual. OpenSSL, Git y OpenSSH son programas del sistema; strongSwan es opcional y se utiliza para el escenario de VPN real.
 
-- Windows 10/11 con PowerShell o un sistema compatible.
-- Python 3.13 o versión compatible con el código y las pruebas.
-- Git para clonar y actualizar el repositorio.
-- OpenSSL 3.x para generar la PKI de laboratorio.
-- OpenSSH Client; OpenSSH Server y una cuenta preparada solo para la prueba de integración SSH.
-- No se necesitan dependencias externas de Python: el proyecto usa la biblioteca estándar.
+## 3. Qué necesitas antes de comenzar
 
-## 2. Instalación
+- Windows 10/11 con PowerShell o un entorno compatible.
+- Python 3.13 o una versión compatible con el código.
+- Git para clonar el repositorio.
+- OpenSSL 3.x para crear los certificados de laboratorio.
+- OpenSSH Client para utilizar el cliente SSH; la prueba de integración requiere además un servidor accesible y una cuenta configurada.
+- Para una VPN real: dos gateways o extremos de red compatibles con strongSwan/IPsec y acceso para configurar rutas y firewall.
 
-Desde PowerShell:
+## 4. Orden recomendado para ejecutar el proyecto
+
+Sigue los pasos en este orden y usa la [guía principal](docs/GUIA_PASO_A_PASO_WINDOWS.md) para ver todos los comandos y las explicaciones de cada uno.
+
+1. **Prepara el entorno.** Instala Python, Git y OpenSSL. Abre PowerShell y clona el repositorio.
+2. **Ejecuta las pruebas iniciales.** Comprueba que Python encuentra el proyecto y revisa qué pruebas pueden ejecutarse antes de configurar certificados y SSH.
+3. **Prueba TCP.** Abre dos terminales, inicia el servidor en una y ejecuta el cliente en la otra. La respuesta debe empezar por `RECIBIDO:`.
+4. **Genera los certificados y prueba TLS.** Crea una CA de laboratorio y el certificado del servidor. Comprueba la conexión válida y que el cliente rechace una CA no confiable o un nombre incorrecto.
+5. **Configura usuarios y permisos.** Crea las cuentas de prueba, inicia el servidor con las rutas de configuración correctas y compara una operación permitida con otra que el rol no puede ejecutar.
+6. **Revisa la auditoría.** Comprueba que se registren los eventos permitidos y rechazados sin almacenar contraseñas.
+7. **Prueba la simulación IPsec.** Ejecuta las pruebas de encapsulación, integridad y anti-replay. Este componente es una simulación a nivel de aplicación, no una VPN del sistema operativo.
+8. **Configura SSH si necesitas demostrarlo.** Autoriza una clave pública en el servidor, verifica la clave de host y ejecuta la prueba de integración.
+9. **Ejecuta de nuevo la suite completa.** Configura las variables de entorno de las pruebas TLS, revisa los casos omitidos y guarda el resultado.
+10. **Configura la VPN real si forma parte de los requisitos.** Sigue la [guía de strongSwan](docs/VPN_IPSEC_REAL_STRONGSWAN.md). Necesitas gateways y redes de laboratorio; ejecutar el programa Python no crea el túnel.
+
+## 5. Instalación rápida
+
+En PowerShell, clona el repositorio y entra en la carpeta:
 
 ```powershell
 git clone https://github.com/brandguss/infraestructura-comunicaciones-seguras.git
 Set-Location infraestructura-comunicaciones-seguras
 python --version
+git status --short
 ```
 
-Si ya tienes el repositorio, entra a su carpeta local en lugar de clonarlo otra vez. Si PowerShell no reconoce `python`, instala Python y activa **Add Python to PATH**; después reinicia la terminal de VS Code.
+Si ya tienes el proyecto descargado, entra a la carpeta local existente en lugar de clonarlo otra vez. Si `python` no se reconoce, instala Python con la opción **Add Python to PATH** activada y reinicia la terminal.
 
-Comprueba la suite:
+Ejecuta la suite inicial:
 
 ```powershell
 python -m unittest discover -s tests -p "test*.py" -v
 ```
 
-Las pruebas que dependen de certificados externos o SSH real se omiten hasta configurar esos requisitos. Una prueba omitida no es una prueba aprobada.
+Algunas pruebas de integración se omiten hasta que existan los certificados o la configuración SSH requerida. Una prueba omitida no confirma que esa función haya sido validada.
 
-## 3. Inicio rápido: TCP local
+## 6. Prueba rápida de TCP
 
-Abre dos terminales en la raíz del repositorio.
-
-**Terminal 1 — servidor:**
+Abre dos terminales PowerShell en la raíz del repositorio. En la **Terminal 1**, inicia el servidor:
 
 ```powershell
 $env:COMMUNICATION_MODE = "tcp"
@@ -65,7 +103,7 @@ $env:TCP_PORT = "5000"
 python -m src.comunicaciones_seguras.tcp_server
 ```
 
-**Terminal 2 — cliente:**
+Deja esa terminal abierta. En la **Terminal 2**, envía un mensaje:
 
 ```powershell
 $env:COMMUNICATION_MODE = "tcp"
@@ -74,104 +112,57 @@ $env:TCP_PORT = "5000"
 python -m src.comunicaciones_seguras.tcp_client "Mensaje TCP de prueba"
 ```
 
-La respuesta debe comenzar con `RECIBIDO:`. TCP sin cifrar se incluye para comparación académica: no envíes credenciales ni información sensible en este modo. Detén el servidor con `Ctrl+C`.
+El cliente debe mostrar una respuesta que comience con `RECIBIDO:`. Esta prueba confirma el intercambio básico de datos; TCP por sí solo no cifra el mensaje. Detén el servidor con `Ctrl+C`.
 
-## 4. Funcionalidades y alcance
+## 7. Componentes del proyecto
 
-| Componente | Implementación | Cómo se demuestra |
-|---|---|---|
-| Cliente/servidor TCP | Implementado | Eco local con dos terminales. |
-| Transporte TLS | Implementado | Cliente y servidor TLS con certificados configurados; TLS 1.2 como mínimo. |
-| Confianza y nombre del certificado | Implementado | CA confiable y CA no confiable, más comprobación del nombre/SAN. |
-| Creación de PKI de laboratorio | Procedimiento reproducible | Comandos OpenSSL de la guía; los archivos se generan fuera del repositorio. |
-| Autenticación | Implementada | Usuarios externos con hashes scrypt y sal por usuario. |
-| Autorización | Implementada | El servidor asigna el rol; cada operación tiene permisos definidos. |
-| Auditoría | Implementada | Eventos JSON Lines, sin guardar contraseñas. |
-| Integración SSH | Prueba de integración con OpenSSH | Requiere host, usuario, clave privada autorizada y host key confiable. |
-| Modos transporte/túnel tipo IPsec | Simulación de aplicación | Paquetes JSON simulados, HMAC-SHA256 y control anti-replay; no es IPsec real. |
-| VPN de acceso remoto | No se crea túnel real | Se explica la arquitectura y qué componentes externos requiere. |
-| VPN sitio a sitio | No se crea túnel real | Se explica la arquitectura; requiere dos gateways, rutas y políticas reales. |
-| Pruebas automatizadas | `unittest` | Suite local; las pruebas de integración necesitan preparación externa. |
-
-Las pruebas se realizan en el entorno indicado en cada fila. Para SSH se necesita un servidor OpenSSH configurado; para comprobar una VPN se necesitan dos extremos de red y tráfico pasando por el túnel.
-
-## 5. Estructura del repositorio
-
-```text
-src/comunicaciones_seguras/
-  config.py             Validación de variables de entorno
-  tcp_server.py         Servidor TCP/TLS y procesamiento de solicitudes
-  tcp_client.py         Cliente TCP/TLS y operaciones protegidas
-  auth.py               Credenciales, roles y autorización
-  audit.py              Registro de eventos JSON Lines
-  user_setup.py         Preparación interactiva de usuarios
-  ipsec_sim.py          Simulación de encapsulación, integridad y anti-replay
-  ipsec_key_setup.py    Generación de clave externa para la simulación
-tests/
-  test_tcp.py
-  test_tls.py
-  test_auth.py
-  test_ssh.py
-  test_ipsec_sim.py
-docs/
-  GUIA_PASO_A_PASO_WINDOWS.md
-```
-
-## 6. Configuración y archivos sensibles
-
-La configuración se proporciona mediante variables de entorno para no incrustar rutas ni secretos en el código. Las rutas externas predeterminadas de la guía son:
-
-- PKI de prueba: `%USERPROFILE%\.infraestructura-comunicaciones-seguras\pki`
-- Usuarios y auditoría: `%USERPROFILE%\.infraestructura-comunicaciones-seguras\auth`
-- Clave de simulación IPsec: `%USERPROFILE%\.infraestructura-comunicaciones-seguras\ipsec`
-
-Variables principales:
-
-| Variable | Uso |
+| Archivo | Responsabilidad |
 |---|---|
-| `TCP_HOST`, `TCP_PORT` | Dirección y puerto de escucha/destino. |
-| `COMMUNICATION_MODE` | `tcp` o `tls`. |
-| `TLS_CERT_FILE`, `TLS_KEY_FILE` | Certificado público y clave privada del servidor TLS. |
-| `TLS_CA_FILE`, `TLS_SERVER_NAME` | CA de confianza y nombre esperado por el cliente. |
-| `AUTH_USERS_FILE`, `AUDIT_LOG_FILE` | Archivo externo de usuarios y archivo externo de auditoría. |
-| `TLS_TEST_CA_FILE`, `TLS_TEST_CERT_FILE`, `TLS_TEST_KEY_FILE`, `TLS_TEST_SERVER_NAME`, `TLS_TEST_UNTRUSTED_CA_FILE` | Material externo requerido por las pruebas TLS correspondientes. |
-| `SSH_TEST_ENABLED` | Debe ser `1` para ejecutar la integración SSH. |
-| `SSH_TEST_HOST`, `SSH_TEST_USER`, `SSH_TEST_PRIVATE_KEY_FILE`, `SSH_TEST_PORT` | Configuración del servidor OpenSSH de pruebas. |
-| `IPSEC_SIM_ENABLED` | `1` activa la simulación de aplicación. |
-| `IPSEC_SIM_KEY_FILE`, `IPSEC_SIM_SPI`, `IPSEC_SIM_MODE` | Clave externa, identificador de asociación y modo `transport` o `tunnel`. |
+| `src/comunicaciones_seguras/config.py` | Lee y valida las variables de entorno. |
+| `src/comunicaciones_seguras/tcp_server.py` | Servidor TCP/TLS, recepción de solicitudes, control de operaciones y respuestas. |
+| `src/comunicaciones_seguras/tcp_client.py` | Cliente TCP/TLS y envío de solicitudes protegidas. |
+| `src/comunicaciones_seguras/auth.py` | Almacenamiento de usuarios de laboratorio, autenticación y autorización por roles. |
+| `src/comunicaciones_seguras/audit.py` | Registro de eventos de seguridad en formato JSON Lines. |
+| `src/comunicaciones_seguras/user_setup.py` | Herramienta para preparar usuarios de prueba. |
+| `src/comunicaciones_seguras/ipsec_sim.py` | Simulación de paquetes, HMAC e identificación de mensajes repetidos. |
+| `src/comunicaciones_seguras/ipsec_key_setup.py` | Preparación de la clave externa para la simulación IPsec. |
+| `tests/test_tcp.py` | Pruebas del transporte TCP. |
+| `tests/test_tls.py` | Pruebas TLS con certificados externos de laboratorio. |
+| `tests/test_auth.py` | Pruebas de autenticación y permisos. |
+| `tests/test_ipsec_sim.py` | Pruebas de la simulación IPsec. |
+| `tests/test_ssh.py` | Pruebas de integración SSH sujetas a configuración externa. |
+| `docs/GUIA_PASO_A_PASO_WINDOWS.md` | Procedimiento principal para instalar, ejecutar y comprobar el proyecto. |
+| `docs/VPN_IPSEC_REAL_STRONGSWAN.md` | Configuración de ejemplo para una VPN real con strongSwan. |
 
-La lista completa, los valores predeterminados y los comandos listos para copiar están en la [guía paso a paso](docs/GUIA_PASO_A_PASO_WINDOWS.md).
+## 8. Funciones y cómo se comprueban
 
-## 7. Crear usuarios y probar autorización
+| Función | Comprobación esperada |
+|---|---|
+| TCP cliente-servidor | El cliente recibe la respuesta `RECIBIDO:`. |
+| TLS | La conexión se establece con un certificado confiable y el cliente valida el nombre del servidor. |
+| Validación de certificados | Se rechaza el nombre incorrecto y una CA no confiable. |
+| Autenticación | Una cuenta válida puede autenticarse; las credenciales incorrectas no permiten ejecutar la operación. |
+| Autorización | Las operaciones permitidas por el rol se aceptan y las no permitidas se rechazan. |
+| Auditoría | Se registran eventos de aceptación/rechazo sin contraseñas. |
+| Simulación IPsec | Las pruebas verifican integridad y rechazo de mensajes repetidos; no demuestra un túnel real. |
+| SSH | La prueba de integración funciona cuando el servidor, la cuenta, la clave y la confianza del host están configurados. |
+| VPN IPsec real | Se valida por separado con dos extremos de red, estado del túnel y tráfico entre subredes. |
 
-La utilidad de preparación solicita las contraseñas de las cuentas de laboratorio `admin`, `operador` y `consulta`. Configura primero las rutas externas:
+## 9. Configuración y archivos externos
 
-```powershell
-$auth = Join-Path $env:USERPROFILE ".infraestructura-comunicaciones-seguras\auth"
-New-Item -ItemType Directory -Force $auth | Out-Null
-$env:AUTH_USERS_FILE = Join-Path $auth "users.json"
-$env:AUDIT_LOG_FILE = Join-Path $auth "audit.jsonl"
-python -m src.comunicaciones_seguras.user_setup
-```
+Los certificados, claves, usuarios y registros de prueba se guardan fuera de la carpeta del repositorio, en el perfil del usuario de Windows. La guía principal incluye los comandos para crear y configurar estas rutas y las variables de entorno que necesitan el servidor, el cliente y las pruebas.
 
-Las operaciones protegidas deben ejecutarse sobre TLS por defecto. El cliente solicita la contraseña sin mostrarla:
+No subas claves privadas, contraseñas, archivos de usuarios ni registros con datos sensibles a GitHub. Si una variable de entorno se configura en PowerShell, solo estará disponible en esa terminal y en los procesos que se inicien desde ella.
 
-```powershell
-python -m src.comunicaciones_seguras.tcp_client --username admin --operation admin_info
-python -m src.comunicaciones_seguras.tcp_client --username consulta --operation list_resources
-```
+## 10. Pruebas automatizadas
 
-La primera operación debe permitirse con credenciales válidas; la segunda debe denegarse por permisos insuficientes. Para que funcione, el servidor debe tener configurados los mismos valores de `AUTH_USERS_FILE` y `AUDIT_LOG_FILE` y debe ejecutarse en modo TLS. Consulta la guía para los comandos completos de ambas terminales.
-
-## 8. Pruebas automatizadas
-
-Suite general:
+Para ejecutar toda la suite:
 
 ```powershell
 python -m unittest discover -s tests -p "test*.py" -v
 ```
 
-Suite con PKI externa ya creada:
+Para las pruebas TLS que requieren los certificados de laboratorio, configura las variables en la misma terminal:
 
 ```powershell
 $pki = Join-Path $env:USERPROFILE ".infraestructura-comunicaciones-seguras\pki"
@@ -183,27 +174,33 @@ $env:TLS_TEST_UNTRUSTED_CA_FILE = "$pki\untrusted-ca\other-ca.crt"
 python -m unittest discover -s tests -p "test*.py" -v
 ```
 
-**Último resultado reportado en esta sesión:** 35 pruebas, 0 fallidas y 2 omitidas. Las omitidas fueron la integración SSH, que requiere habilitación y credenciales reales, y una prueba de certificado no confiable antes de definir su variable de entorno. Después de configurar `TLS_TEST_UNTRUSTED_CA_FILE`, vuelve a ejecutar la suite para comprobar que esa prueba también se ejecute. Este resultado es el resultado reportado previamente, no una afirmación de que todas las pruebas externas se ejecutaron en cada equipo.
+Revisa el resumen al final: debe indicar cuántas pruebas se ejecutaron, cuántas fallaron y cuántas se omitieron. Las pruebas SSH y VPN dependen de sistemas externos y no se consideran comprobadas por una suite unitaria local.
 
-## 9. Seguridad y limitaciones
+Para guardar la salida de la suite como evidencia:
 
-- TCP sin cifrar es solo para mensajes de prueba.
-- No desactives la validación del certificado TLS ni la verificación de la clave del host SSH.
-- La simulación IPsec utiliza HMAC para integridad/autenticidad y anti-replay; **no cifra la carga y no es una implementación interoperable de IPsec**.
-- Se añadió una guía de configuración real sitio a sitio con strongSwan, pero la configuración no se aplica automáticamente ni ha sido validada contra dos gateways de este laboratorio. La VPN de acceso remoto también requiere configurar el gateway, certificados, autenticación individual, pool de direcciones, rutas y firewall; consulta la guía para distinguirlo del túnel sitio a sitio.
-- Las claves privadas, claves simétricas, certificados de prueba, usuarios, hashes, sales y auditorías deben permanecer fuera de Git.
-- Es un proyecto académico; no está certificado ni auditado para producción.
+```powershell
+python -m unittest discover -s tests -p "test*.py" -v 2>&1 | Tee-Object -FilePath ".\resultado_pruebas.txt"
+```
 
-## 10. Evidencias recomendadas para la entrega
+## 11. Alcance de la simulación IPsec y de las VPN
 
-1. TCP: servidor activo y respuesta del cliente.
-2. TLS: conexión validada y respuesta del cliente.
-3. TLS: rechazo de CA no confiable.
-4. Autorización: operación permitida y operación denegada por rol.
-5. Auditoría: eventos permitidos/rechazados sin contraseñas.
-6. Suite de pruebas con resumen de aprobadas, fallidas y omitidas.
-7. Simulación IPsec en transporte/túnel y prueba anti-replay.
-8. SSH real solo si se configuró el servidor, usuario, clave y confianza del host.
-9. VPN real solo con un túnel externo configurado y comprobado; no usar la simulación como evidencia de túnel.
+El módulo `ipsec_sim.py` representa conceptos de encapsulación, autenticación mediante HMAC y control anti-replay dentro de la aplicación Python. HMAC permite detectar modificaciones y autenticar el paquete si la clave es compartida, pero **no cifra el contenido** y el módulo no implementa el protocolo IPsec del sistema operativo.
 
-El proyecto se preparó como práctica de laboratorio. Para reproducir los resultados, sigue las instrucciones en orden, utiliza certificados y claves de prueba fuera de la carpeta del repositorio y guarda las evidencias de cada comprobación. Las pruebas de la aplicación y las pruebas de la VPN se ejecutan por separado, ya que validan componentes diferentes.
+Para probar una VPN real, configura strongSwan u otra implementación IPsec en los gateways, define direcciones, subredes, autenticación, rutas y reglas de firewall, y verifica que los paquetes de prueba pasen por el túnel. La guía de VPN proporciona ejemplos de configuración que deben adaptarse al laboratorio. La prueba de acceso remoto y la prueba sitio a sitio son escenarios diferentes.
+
+## 12. Lista de verificación para la entrega
+
+- [ ] El servidor TCP inicia y el cliente recibe la respuesta esperada.
+- [ ] La conexión TLS funciona con el certificado correcto.
+- [ ] TLS rechaza un nombre de servidor incorrecto y una CA no confiable.
+- [ ] La autenticación distingue credenciales válidas e inválidas.
+- [ ] La autorización permite o rechaza operaciones según el rol.
+- [ ] La auditoría registra los resultados sin almacenar contraseñas.
+- [ ] Las pruebas de la simulación IPsec, incluida la protección anti-replay, pasan.
+- [ ] La suite completa termina sin fallos; los casos omitidos están identificados.
+- [ ] La prueba SSH se ejecuta si el entorno de integración está configurado.
+- [ ] La VPN real se marca como comprobada solo después de establecer el túnel y validar tráfico entre redes.
+
+## 13. Notas para reproducir los resultados
+
+Las pruebas locales de TCP, TLS, autenticación y simulación se pueden ejecutar en una computadora. La integración SSH requiere un servidor y credenciales configurados. Una VPN real requiere dos extremos de red y su configuración. Guarda las salidas y capturas de cada comprobación para que se pueda identificar qué parte del proyecto se ejecutó y cuál depende de infraestructura externa.
