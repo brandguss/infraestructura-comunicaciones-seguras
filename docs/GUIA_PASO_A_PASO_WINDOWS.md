@@ -2,6 +2,18 @@
 
 Esta guía lleva el proyecto desde la preparación de Windows hasta la comprobación de cada requisito: TCP frente a TLS, PKI, usuarios y auditoría, IPsec simulado, SSH real, las dos VPN simuladas y la prueba entre dos computadoras. Cada bloque explica para qué sirve, qué debe verse en pantalla y cómo interpretar un error.
 
+## Cómo seguir la demostración
+
+La guía está organizada para que puedas seguirla mientras presentas el proyecto. En cada prueba identifica **qué estamos comprobando**, **en qué terminal ejecutar cada comando**, **qué resultado debe aparecer** y **qué demuestra ese resultado**.
+
+- **Terminal 1 — servidor:** inicia el servicio y debe permanecer abierta mientras el cliente se conecta. No ejecutes los comandos del cliente en esta terminal.
+- **Terminal 2 — cliente:** envía el mensaje o la solicitud al servidor y muestra la respuesta o el rechazo esperado.
+- **Terminal 3 — pruebas y revisión:** úsala para ejecutar `unittest`, consultar `audit.jsonl` o revisar registros cuando no necesites que esa terminal mantenga otro proceso.
+- **Importante en PowerShell:** las variables `$env:...` solo existen en la terminal donde las definiste. Si un paso necesita una variable, vuelve a definirla en la terminal indicada; no supongas que se comparte con otra ventana.
+- **Antes de avanzar:** compara la salida con el resultado esperado. Si no coincide, usa la sección 12 de solución de problemas y no presentes la prueba como aprobada.
+
+Los comandos y salidas de esta guía describen el resultado esperado; deben ejecutarse en tu equipo para confirmar el funcionamiento real. Una prueba omitida (`skipped`) no es una prueba aprobada.
+
 Los archivos con claves, usuarios y registros se guardan fuera del repositorio (en `%USERPROFILE%\.infraestructura-comunicaciones-seguras`) para que no terminen publicados en GitHub. Las secciones 1 a 8 se hacen en orden; las secciones 9, 10 y 11 son independientes entre sí.
 
 ## 1. Descargar el proyecto y comprobar Python
