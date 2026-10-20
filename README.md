@@ -2,7 +2,10 @@
 
 Proyecto académico en Python para estudiar comunicaciones TCP/TLS, certificados y confianza, autenticación y autorización por roles, auditoría, administración remota por OpenSSH y conceptos de encapsulación tipo IPsec.
 
-**Guía completa de instalación y ejecución para Windows/PowerShell:** [docs/GUIA_PASO_A_PASO_WINDOWS.md](docs/GUIA_PASO_A_PASO_WINDOWS.md). Incluye comandos separados para las terminales del servidor y cliente, generación de certificados, configuración de usuarios, ejecución de pruebas, solución de problemas y evidencia sugerida.
+**Guías del proyecto:**
+
+- [Instalación y ejecución paso a paso en Windows/PowerShell](docs/GUIA_PASO_A_PASO_WINDOWS.md): terminales separadas, certificados, usuarios, pruebas, solución de problemas y evidencias.
+- [Guía de IPsec real con strongSwan](docs/VPN_IPSEC_REAL_STRONGSWAN.md): plantilla de laboratorio sitio a sitio, comandos de Linux, forwarding, firewall y comprobaciones. Requiere dos gateways Linux y adaptar todas las direcciones y secretos al laboratorio.
 
 > **Alcance real:** TCP/TLS, validación de certificados, autenticación/autorización, auditoría y la simulación IPsec están implementados en código. SSH se prueba mediante OpenSSH del sistema cuando se configura. La simulación IPsec no es el protocolo IPsec del sistema operativo y no crea una VPN. Los escenarios de VPN de acceso remoto y sitio a sitio requieren gateways y túneles reales que este repositorio no configura. No presentar la simulación como una VPN real.
 
@@ -173,7 +176,7 @@ python -m unittest discover -s tests -p "test*.py" -v
 - TCP sin cifrar es solo para mensajes de prueba.
 - No desactives la validación del certificado TLS ni la verificación de la clave del host SSH.
 - La simulación IPsec utiliza HMAC para integridad/autenticidad y anti-replay; **no cifra la carga y no es una implementación interoperable de IPsec**.
-- El repositorio no crea una VPN de acceso remoto ni una VPN sitio a sitio. Para demostrar esas funciones se necesita instalar/configurar un sistema VPN real, dos extremos de red, rutas y reglas de firewall, y verificar tráfico a través del túnel.
+- Se añadió una guía de configuración real sitio a sitio con strongSwan, pero la configuración no se aplica automáticamente ni ha sido validada contra dos gateways de este laboratorio. La VPN de acceso remoto también requiere configurar el gateway, certificados, autenticación individual, pool de direcciones, rutas y firewall; consulta la guía para distinguirlo del túnel sitio a sitio.
 - Las claves privadas, claves simétricas, certificados de prueba, usuarios, hashes, sales y auditorías deben permanecer fuera de Git.
 - Es un proyecto académico; no está certificado ni auditado para producción.
 
