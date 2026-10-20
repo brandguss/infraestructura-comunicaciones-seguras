@@ -382,3 +382,82 @@ python -m unittest discover -s tests -p "test*.py" -v 2>&1 | Tee-Object -FilePat
 ```
 
 El archivo `resultado_pruebas.txt` contiene la salida de la ejecución y se puede revisar junto con las capturas de las terminales. Antes de publicarlo, comprueba que no incluya rutas privadas que no quieras compartir ni datos sensibles.
+
+
+## 16. Cómo usar las terminales y probar desde dos computadoras
+
+Las primeras pruebas de las secciones 4 y 5 usan `127.0.0.1`. Esto es útil para comprobar que el programa arranca y que cliente y servidor se entienden, pero ambos procesos están en la misma computadora. Para demostrar el requisito de la práctica, repite TCP y TLS con dos equipos diferentes conectados a la misma red de laboratorio.
+
+### Preparación de la computadora servidor
+
+En el equipo que ejecutará el servidor, abre PowerShell y consulta la dirección IPv4:
+
+```powershell
+ipconfig
+```
+
+Identifica la dirección IPv4 del adaptador conectado a la red de laboratorio; por ejemplo, en los siguientes comandos se usa `192.168.1.50` como ejemplo. Sustitúyela por la dirección real del servidor. No copies esa dirección de ejemplo sin comprobarla.
+
+En la **Terminal 1 del servidor**, entra en la carpeta del proyecto y configura el servidor para escuchar en las interfaces de red:
+
+```powershell
+Set-Location "RUTA\infraestructura-comunicaciones-seguras"
+$env:COMMUNICATION_MODE = "tcp"
+$env:TCP_HOST = "0.0.0.0"
+$env:TCP_PORT = "5000"
+python -m src.comunicaciones_seguras.tcp_server
+```
+
+`0.0.0.0` indica al servidor que escuche en las interfaces IPv4 disponibles; no es la dirección que debe usar el cliente. Mantén abierta esta terminal mientras haces la prueba.
+
+En el firewall de Windows crea una regla de entrada para el puerto TCP que vas a probar y limita el origen a la red privada del laboratorio. No abras el puerto a redes públicas. Si el cliente no logra conectar, comprueba primero que ambos equipos estén en la misma red, que la dirección IPv4 sea correcta y que el firewall permita la conexión.
+
+### Prueba TCP desde la computadora cliente
+
+En la computadora cliente, abre PowerShell y entra en la carpeta del repositorio. En la **Terminal 2 del cliente**, utiliza la IP real del servidor:
+
+```powershell
+Set-Location "RUTA\infraestructura-comunicaciones-seguras"
+$env:COMMUNICATION_MODE = "tcp"
+$env:TCP_HOST = "192.168.1.50"
+$env:TCP_PORT = "5000"
+python -m src.comunicaciones_seguras.tcp_client "Prueba TCP entre equipos"
+```
+
+Cambia `192.168.1.50` por la dirección real del servidor. El resultado esperado es una respuesta que empieza por `RECIBIDO:`. Esto confirma la comunicación entre computadoras; el contenido de esta prueba TCP no está cifrado. Cuando termines, detén el servidor con `Ctrl+C`.
+
+### Prueba TLS entre computadoras
+
+Para TLS no basta con cambiar la IP del cliente: el certificado del servidor tiene que identificar el nombre que utiliza el cliente. El certificado generado en la sección 3 solo incluye `localhost` y `127.0.0.1`, por lo que no validará la dirección IP de otro equipo. Genera un certificado de servidor cuyo SAN contenga la IP real o el nombre DNS de la computadora servidor y fírmalo con la CA de laboratorio. Conserva la clave privada fuera del repositorio.
+
+En la computadora servidor, usa el certificado nuevo y su clave privada:
+
+```powershell
+$env:COMMUNICATION_MODE = "tls"
+$env:TCP_HOST = "0.0.0.0"
+$env:TCP_PORT = "5001"
+$env:TLS_CERT_FILE = "RUTA\server.crt"
+$env:TLS_KEY_FILE = "RUTA\server.key"
+python -m src.comunicaciones_seguras.tcp_server
+```
+
+En la computadora cliente, copia de forma segura el certificado público de la CA, no la clave privada de la CA. Configura la IP de conexión y el nombre que aparece en el SAN del certificado:
+
+```powershell
+$env:COMMUNICATION_MODE = "tls"
+$env:TCP_HOST = "192.168.1.50"
+$env:TCP_PORT = "5001"
+$env:TLS_CA_FILE = "RUTA\root-ca.crt"
+$env:TLS_SERVER_NAME = "192.168.1.50"
+python -m src.comunicaciones_seguras.tcp_client "Prueba TLS entre equipos"
+```
+
+Los valores de ruta son marcadores y deben reemplazarse por las rutas existentes en cada computadora. Si el SAN contiene un nombre DNS en lugar de la IP, configura `TLS_SERVER_NAME` con ese nombre y asegúrate de que el cliente pueda resolverlo. La prueba correcta debe mostrar que TLS validó el certificado y que se recibió la respuesta. Si la validación falla, revisa la CA, el SAN, las fechas del certificado y el nombre configurado; no desactives la validación para evitar el error.
+
+### Qué terminal debe permanecer abierta
+
+- **Terminal 1 (servidor):** permanece ejecutando `tcp_server`; aquí se observan mensajes de inicio y errores del servidor.
+- **Terminal 2 (cliente):** ejecuta `tcp_client` una vez por cada mensaje de prueba y muestra el resultado de la conexión.
+- **Terminal de pruebas:** cuando no necesites mantener un servidor abierto, ejecuta `python -m unittest discover -s tests -p "test*.py" -v` en la raíz del repositorio. Las variables de entorno de TLS deben definirse en esa misma terminal antes de lanzar las pruebas.
+
+No compartas claves privadas ni copies `server.key` o `root-ca.key` a la computadora cliente. El cliente solo necesita el certificado público de la CA para validar al servidor.
