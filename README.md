@@ -84,39 +84,31 @@ Para demostrar la conexión entre dos computadoras, conecta ambos equipos a la m
 
 ## 4. Orden recomendado para ejecutar el proyecto
 
-Sigue los pasos en este orden y usa la [guía principal](docs/GUIA_PASO_A_PASO_WINDOWS.md) para ver todos los comandos y las explicaciones de cada uno.
+**Esta lista resume el orden; no es una segunda guía con comandos alternativos.** Para ejecutar el proyecto, abre la [guía principal](docs/GUIA_PASO_A_PASO_WINDOWS.md) y sigue sus pasos numerados de principio a fin. Usa esta lista únicamente como índice de las etapas.
 
-1. **Prepara el entorno.** Instala Python, Git y OpenSSL. Abre PowerShell y clona el repositorio.
-2. **Ejecuta las pruebas iniciales.** Comprueba que Python encuentra el proyecto y revisa qué pruebas pueden ejecutarse antes de configurar certificados y SSH.
-3. **Prueba TCP.** Abre dos terminales, inicia el servidor en una y ejecuta el cliente en la otra. La respuesta debe empezar por `RECIBIDO:`.
-4. **Genera los certificados y prueba TLS.** Crea una CA de laboratorio y el certificado del servidor. Comprueba la conexión válida y que el cliente rechace una CA no confiable o un nombre incorrecto.
-5. **Configura usuarios y permisos.** Crea las cuentas de prueba, inicia el servidor con las rutas de configuración correctas y compara una operación permitida con otra que el rol no puede ejecutar.
-6. **Revisa la auditoría.** Comprueba que se registren los eventos permitidos y rechazados sin almacenar contraseñas.
-7. **Prueba la simulación IPsec.** Ejecuta las pruebas de encapsulación, integridad y anti-replay. Este componente es una simulación a nivel de aplicación, no una VPN del sistema operativo.
-8. **Configura SSH si necesitas demostrarlo.** Autoriza una clave pública en el servidor, verifica la clave de host y ejecuta la prueba de integración.
-9. **Ejecuta de nuevo la suite completa.** Configura las variables de entorno de las pruebas TLS, revisa los casos omitidos y guarda el resultado.
-10. **Configura la VPN real si forma parte de los requisitos.** Sigue la [guía de strongSwan](docs/VPN_IPSEC_REAL_STRONGSWAN.md). Necesitas gateways y redes de laboratorio; ejecutar el programa Python no crea el túnel.
+1. **Preparación:** instala Python, Git y OpenSSL; clona el repositorio y entra en la carpeta.
+2. **Pruebas iniciales:** ejecuta las pruebas disponibles y revisa los casos omitidos.
+3. **TCP:** inicia el servidor y después ejecuta el cliente; espera una respuesta que empiece por `RECIBIDO:`.
+4. **TLS y PKI:** crea los certificados y verifica una conexión válida, el rechazo de una CA no confiable y el nombre del servidor.
+5. **Usuarios, permisos y auditoría:** prueba una operación permitida y otra denegada, y comprueba los registros.
+6. **Simulación IPsec:** comprueba integridad y anti-replay; recuerda que no es un túnel IPsec real.
+7. **SSH:** configura el servidor, la clave pública y la confianza del host antes de ejecutar la prueba de integración.
+8. **Suite final:** vuelve a ejecutar las pruebas y registra qué pasó, falló o se omitió.
+9. **VPN real, si la actividad la requiere:** consulta la guía de strongSwan. Es un procedimiento externo que necesita gateways y redes configurados.
 
-## 5. Instalación rápida
+## 5. Preparación rápida (solo para clonar el repositorio)
 
-En PowerShell, clona el repositorio y entra en la carpeta:
+Este bloque **solo descarga el proyecto**. No sustituye la guía principal ni constituye una segunda secuencia de pruebas. Si ya tienes el repositorio descargado, no lo clones otra vez: abre la carpeta local existente.
 
 ```powershell
 git clone https://github.com/brandguss/infraestructura-comunicaciones-seguras.git
 Set-Location infraestructura-comunicaciones-seguras
 python --version
-git status --short
 ```
 
-Si ya tienes el proyecto descargado, entra a la carpeta local existente en lugar de clonarlo otra vez. Si `python` no se reconoce, instala Python con la opción **Add Python to PATH** activada y reinicia la terminal.
+**Resultado esperado:** Git termina sin errores, se crea la carpeta `infraestructura-comunicaciones-seguras` y `python --version` muestra una versión compatible de Python. Si `python` no se reconoce, instala Python con la opción **Add Python to PATH** activada y reinicia la terminal.
 
-Ejecuta la suite inicial:
-
-```powershell
-python -m unittest discover -s tests -p "test*.py" -v
-```
-
-Algunas pruebas de integración se omiten hasta que existan los certificados o la configuración SSH requerida. Una prueba omitida no confirma que esa función haya sido validada.
+**Siguiente paso obligatorio:** abre la [guía principal](docs/GUIA_PASO_A_PASO_WINDOWS.md) y continúa desde el paso 1. No ejecutes la suite inicial por separado aquí; la guía principal indica cuándo hacerlo y qué resultado comprobar.
 
 ## 6. Prueba rápida de TCP
 
