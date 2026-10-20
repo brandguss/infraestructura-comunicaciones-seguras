@@ -219,3 +219,18 @@ Para probar una VPN real, configura strongSwan u otra implementación IPsec en l
 ## 13. Notas para reproducir los resultados
 
 Las pruebas locales de TCP, TLS, autenticación y simulación se pueden ejecutar en una computadora. La integración SSH requiere un servidor y credenciales configurados. Una VPN real requiere dos extremos de red y su configuración. Guarda las salidas y capturas de cada comprobación para que se pueda identificar qué parte del proyecto se ejecutó y cuál depende de infraestructura externa.
+
+## 14. Principales limitaciones de seguridad
+
+Este proyecto es un laboratorio educativo y **no debe utilizarse como infraestructura de producción**. Sus principales límites son:
+
+- **IPsec simulado:** `ipsec_sim.py` trabaja dentro de la aplicación Python; no implementa el protocolo IPsec del sistema operativo ni cifra el contenido del paquete. HMAC permite comprobar integridad/autenticidad con una clave compartida, pero no sustituye el cifrado.
+- **VPN no creada automáticamente:** el código Python no establece un túnel VPN real. El acceso remoto y el escenario sitio a sitio deben presentarse como escenarios diferenciados y probarse explícitamente; la guía strongSwan es una configuración externa opcional y no evidencia por sí sola que el túnel funcione.
+- **Alcance de las pruebas:** las pruebas locales no demuestran comunicación entre computadoras diferentes. Las pruebas de integración SSH requieren un servidor, usuarios, claves y confianza del host correctamente configurados. Cualquier prueba omitida debe reportarse como pendiente, no como aprobada.
+- **Certificados de laboratorio:** la CA y los certificados son para pruebas. En un despliegue real se necesita proteger la clave privada de la CA, controlar su emisión y revocación, renovar certificados y mantener la clave privada del servidor fuera del repositorio.
+- **Gestión de secretos:** las claves, contraseñas y archivos de usuarios deben protegerse con permisos adecuados y nunca publicarse en GitHub. Las claves de prueba no deben reutilizarse en producción.
+- **Autenticación y autorización:** las cuentas y roles están diseñados para demostrar conceptos en un entorno controlado. Antes de un uso real se requiere revisar políticas de contraseñas, bloqueo/rate limiting, gestión de sesiones, privilegios mínimos y almacenamiento de secretos.
+- **Auditoría:** los registros ayudan a revisar eventos, pero no son por sí solos un sistema de auditoría resistente a manipulación. En producción se necesitaría centralización, control de acceso, retención y protección contra modificación.
+- **Red y firewall:** las pruebas sobre `127.0.0.1` solo verifican conexiones dentro del mismo equipo. La exposición en una red real requiere configurar firewall, limitar interfaces y puertos, verificar nombres/IP del certificado y evaluar la segmentación de red.
+
+Por lo tanto, los resultados deben describirse según las pruebas que realmente se ejecutaron. La documentación y los ejemplos no equivalen a una certificación de seguridad ni a la validación de una VPN real.
