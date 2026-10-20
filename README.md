@@ -7,6 +7,22 @@ Proyecto en Python para practicar comunicaciones TCP, conexiones TLS con certifi
 - **[Guía principal: instalación y ejecución paso a paso](docs/GUIA_PASO_A_PASO_WINDOWS.md)**. Explica qué instalar, qué comando ejecutar en cada terminal, para qué sirve cada paso, qué resultado esperar y cómo resolver errores. Incluye TCP, TLS, certificados, usuarios, permisos, auditoría, SSH y pruebas.
 - **[Guía de VPN IPsec con strongSwan](docs/VPN_IPSEC_REAL_STRONGSWAN.md)**. Contiene ejemplos para VPN sitio a sitio y acceso remoto, junto con configuración de gateways, forwarding, firewall y comprobaciones del túnel.
 
+## Arquitectura y objetivo de cada mecanismo
+
+El proyecto separa los mecanismos porque no resuelven el mismo problema. TCP permite transportar mensajes, TLS protege la sesión entre cliente y servidor, la CA permite validar la identidad del servidor, SSH sirve para administración remota, y la simulación IPsec representa la protección de paquetes y el control anti-replay. La autenticación identifica al usuario; la autorización decide qué operaciones puede realizar; la auditoría deja constancia de las decisiones.
+
+| Apartado | Qué se espera demostrar | Qué aporta y por qué se incluye |
+|---|---|---|
+| Cliente y servidor TCP | El cliente envía un mensaje y recibe respuesta. | Es la referencia inicial para comparar una conexión sin cifrado con TLS. |
+| TLS | El cliente y el servidor establecen una sesión protegida. | Cifra el tráfico de la sesión y protege su integridad durante el transporte. |
+| PKI y certificados | El cliente confía en la CA correcta y rechaza una CA desconocida o un nombre incorrecto. | Permite verificar la identidad del servidor, no solo cifrar la conexión. |
+| SSH | Una cuenta autorizada se conecta usando OpenSSH y una clave de host verificada. | Proporciona administración remota protegida. La integración SSH requiere un servidor y credenciales configurados. |
+| Simulación IPsec | Se pueden elegir los modos transporte y túnel y detectar paquetes alterados o repetidos. | Representa la protección de paquetes IP y la defensa contra replay sin implementar un protocolo de producción. |
+| VPN de acceso remoto | El usuario se autentica y las operaciones disponibles dependen de su rol. | Representa la conexión de un equipo remoto a recursos internos con acceso limitado. Actualmente esta parte debe demostrarse mediante el escenario de simulación que se prepare; la guía strongSwan es una alternativa de túnel real, no un simulador Python. |
+| VPN sitio a sitio | Se distingue una conexión entre dos redes detrás de gateways de una conexión de usuario remoto. | Representa la comunicación protegida entre redes diferentes. La guía describe un despliegue real, pero no lo crea automáticamente. |
+| Autenticación, autorización y auditoría | Se prueban credenciales válidas e inválidas, permisos por rol y eventos registrados. | Distingue quién es el usuario, qué puede hacer y qué ocurrió durante el intento. |
+| Pruebas | Las pruebas automatizadas confirman los comportamientos implementados y muestran los casos omitidos. | Permite repetir las comprobaciones y detectar regresiones. Las pruebas locales no demuestran por sí mismas una conexión entre dos computadoras ni una VPN real. |
+
 ## 1. Tecnologías y herramientas utilizadas
 
 | Tecnología o herramienta | Uso en el proyecto |
@@ -55,6 +71,12 @@ No existe un archivo `requirements.txt` porque no hay dependencias de terceros d
 - OpenSSL 3.x para crear los certificados de laboratorio.
 - OpenSSH Client para utilizar el cliente SSH; la prueba de integración requiere además un servidor accesible y una cuenta configurada.
 - Para una VPN real: dos gateways o extremos de red compatibles con strongSwan/IPsec y acceso para configurar rutas y firewall.
+
+## Dónde ejecutar cada paso
+
+En las pruebas iniciales se pueden usar dos terminales de PowerShell en una sola computadora: la Terminal 1 mantiene el servidor abierto y la Terminal 2 ejecuta el cliente o las pruebas. Esta modalidad comprueba el intercambio básico, pero la dirección `127.0.0.1` siempre apunta al mismo equipo y **no satisface por sí sola el requisito de cliente y servidor en computadoras diferentes**.
+
+Para demostrar la conexión entre dos computadoras, conecta ambos equipos a la misma red de laboratorio. En la computadora servidor, averigua la IP local con `ipconfig`, permite el puerto elegido en el firewall solo para la red privada y configura el servidor para escuchar en las interfaces de red. En la computadora cliente, configura `TCP_HOST` con la IP del servidor, no con `127.0.0.1`. Para TLS, el certificado del servidor debe incluir en su SAN el nombre DNS o la dirección IP que el cliente utilizará; el certificado local de ejemplo solo cubre `localhost` y `127.0.0.1`, por lo que hay que generar otro para la IP/nombre del servidor.
 
 ## 4. Orden recomendado para ejecutar el proyecto
 
@@ -147,6 +169,12 @@ El cliente debe mostrar una respuesta que comience con `RECIBIDO:`. Esta prueba 
 | Simulación IPsec | Las pruebas verifican integridad y rechazo de mensajes repetidos; no demuestra un túnel real. |
 | SSH | La prueba de integración funciona cuando el servidor, la cuenta, la clave y la confianza del host están configurados. |
 | VPN IPsec real | Se valida por separado con dos extremos de red, estado del túnel y tráfico entre subredes. |
+
+## Cobertura actual de los requisitos
+
+La mayor parte de los componentes principales está implementada y cuenta con pruebas de código: TCP, TLS, validación de certificados con material de prueba, autenticación, permisos, auditoría y la simulación IPsec. La suite ejecutada anteriormente terminó con 35 pruebas, sin fallos y con 2 omitidas; ese resultado corresponde a esa ejecución y no confirma pruebas externas que se hayan omitido.
+
+Hay tres verificaciones que deben mantenerse separadas de ese resultado: (1) cliente y servidor en computadoras diferentes; (2) integración SSH con una prueba real de acceso permitido y rechazo de una cuenta/clave no autorizada, incluyendo los registros que exige la entrega; y (3) representación y pruebas específicas de VPN de acceso remoto y VPN sitio a sitio. La guía strongSwan permite preparar una VPN real, pero no equivale por sí sola a la simulación de ambos escenarios dentro de la aplicación. No se debe afirmar que estos puntos están comprobados hasta que se ejecute la prueba correspondiente.
 
 ## 9. Configuración y archivos externos
 
