@@ -310,18 +310,6 @@ La simulación del paso anterior y una VPN real son comprobaciones diferentes. P
 
 Una prueba de túnel no se puede demostrar únicamente con el eco TCP ni con la simulación. No se presenta este proyecto como VPN real hasta que se configure un gateway real y se compruebe conectividad entre las redes a través del túnel. Las plantillas de configuración deben adaptarse a las redes reales, sin publicar claves privadas ni PSK.
 
-## 12. Qué evidencia guardar para la entrega
-
-- Captura del servidor TCP escuchando y el cliente recibiendo `RECIBIDO:`.
-- Captura del servidor TLS y del cliente mostrando conexión TLS validada.
-- Resultado de prueba con CA no confiable rechazada.
-- Salida de operaciones protegidas permitida y denegada según rol.
-- Fragmento de auditoría sin contraseñas ni datos sensibles.
-- Resultado de `python -m unittest discover -s tests -p "test*.py" -v`, incluyendo las pruebas omitidas y su motivo.
-- Salida de pruebas IPsec simuladas.
-- Resultado de SSH real solo si se configuró clave, usuario y host.
-- Para VPN real, captura del estado del túnel y prueba de conectividad entre subredes; no sustituirla por una captura de la simulación.
-
 ## 13. Solución de problemas frecuentes
 
 | Síntoma | Comprobación |
