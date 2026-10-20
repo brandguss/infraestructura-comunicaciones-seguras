@@ -1,4 +1,4 @@
-"""Pruebas seguras, opcionales y reales contra OpenSSH externo."""
+"""Pruebas SSH: lógica local siempre activa e integración real opcional contra OpenSSH."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import os
 import shutil
 import subprocess
 import sys
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -13,25 +14,13 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src.comunicaciones_seguras.config import load_ssh_integration_config
-
-
-def safe_ssh_failure_reason(stderr: str) -> str:
-    """Resume fallos de OpenSSH sin incluir rutas, claves ni salida del servidor."""
-    normalized = stderr.lower()
-    if "host key verification failed" in normalized:
-        return "verificación de clave de host fallida"
-    if "load key" in normalized or "identity file" in normalized or "no such file" in normalized:
-        return "clave privada no disponible para el proceso"
-    if "sign_and_send_pubkey: signing failed" in normalized or "agent refused operation" in normalized:
-        return "el agente o la firma de la clave privada falló"
-    if "permission denied" in normalized:
-        return "autenticación por clave rechazada"
-    if "connection refused" in normalized:
-        return "conexión SSH rechazada"
-    if "timed out" in normalized:
-        return "conexión SSH agotó el tiempo límite"
-    return "fallo SSH no clasificado; revise la configuración local"
+from src.comunicaciones_seguras.audit import AuditLogger
+from src.comunicaciones_seguras.config import SSHIntegrationConfig, load_ssh_integration_config
+from src.comunicaciones_seguras.ssh_admin import (
+    build_ssh_command,
+    run_admin_command,
+    safe_ssh_failure_reason,
+)
 
 
 class SSHConfigurationTests(unittest.TestCase):
@@ -78,6 +67,81 @@ class SSHConfigurationTests(unittest.TestCase):
         )
 
 
+def fake_config(directory: str) -> SSHIntegrationConfig:
+    return SSHIntegrationConfig(
+        executable="ssh", host="servidor-lab", user="admin-lab",
+        private_key_file=Path(directory) / "clave-externa", port=22, timeout_seconds=10, known_hosts_file=None,
+    )
+
+
+def fake_runner(returncode: int, stdout: str = "", stderr: str = ""):
+    def run(command, **kwargs):  # noqa: ANN001 - firma compatible con subprocess.run
+        return subprocess.CompletedProcess(command, returncode, stdout, stderr)
+    return run
+
+
+class SSHAdminClientTests(unittest.TestCase):
+    """Comprueban restricciones y registro de intentos sin necesitar un servidor SSH."""
+
+    def setUp(self) -> None:
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.config = fake_config(self.directory.name)
+        self.audit_path = Path(self.directory.name) / "audit.jsonl"
+        self.audit = AuditLogger(self.audit_path)
+
+    def events(self) -> list[dict[str, object]]:
+        return [json.loads(line) for line in self.audit_path.read_text(encoding="utf-8").splitlines()]
+
+    def test_command_forces_key_authentication_and_host_verification(self) -> None:
+        command = build_ssh_command(self.config, "whoami")
+        for option in ("BatchMode=yes", "PasswordAuthentication=no", "StrictHostKeyChecking=yes"):
+            self.assertIn(option, command)
+        self.assertEqual(command[-2:], ["admin-lab@servidor-lab", "whoami"])
+
+    def test_only_allowed_commands_can_be_run(self) -> None:
+        for unsafe in ("rm -rf /", "whoami; hostname", "cmd /c dir", ""):
+            with self.subTest(command=unsafe), self.assertRaises(ValueError):
+                build_ssh_command(self.config, unsafe)
+
+    def test_authorized_access_is_audited_as_allowed(self) -> None:
+        result = run_admin_command(self.config, "whoami", self.audit, runner=fake_runner(0, "admin-lab\n"))
+        self.assertTrue(result.allowed)
+        self.assertEqual(result.output, "admin-lab")
+        event = self.events()[-1]
+        self.assertEqual((event["username"], event["operation"], event["result"]), ("admin-lab", "ssh:whoami", "allowed"))
+
+    def test_unauthorized_access_is_audited_as_denied_without_leaking_details(self) -> None:
+        stderr = "Load key C:\\Users\\privado\\id: ok\nadmin-lab@servidor-lab: Permission denied (publickey)."
+        result = run_admin_command(self.config, "whoami", self.audit, runner=fake_runner(255, "", stderr))
+        self.assertFalse(result.allowed)
+        self.assertEqual(result.reason, "clave privada no disponible para el proceso")
+        event = self.events()[-1]
+        self.assertEqual(event["result"], "denied")
+        self.assertNotIn("privado", self.audit_path.read_text(encoding="utf-8"))
+
+    def test_rejected_public_key_is_classified_and_audited(self) -> None:
+        result = run_admin_command(
+            self.config, "hostname", self.audit,
+            runner=fake_runner(255, "", "admin-lab@servidor-lab: Permission denied (publickey)."),
+        )
+        self.assertEqual(result.reason, "autenticación por clave rechazada")
+        self.assertEqual(self.events()[-1]["reason"], "autenticación por clave rechazada")
+
+    def test_timeout_is_a_denied_attempt(self) -> None:
+        def slow(command, **kwargs):  # noqa: ANN001
+            raise subprocess.TimeoutExpired(command, 1)
+
+        result = run_admin_command(self.config, "whoami", self.audit, runner=slow)
+        self.assertFalse(result.allowed)
+        self.assertEqual(self.events()[-1]["result"], "denied")
+
+    def test_each_attempt_adds_one_audit_event(self) -> None:
+        run_admin_command(self.config, "whoami", self.audit, runner=fake_runner(0, "x"))
+        run_admin_command(self.config, "whoami", self.audit, runner=fake_runner(255, "", "Permission denied"))
+        self.assertEqual([event["result"] for event in self.events()], ["allowed", "denied"])
+
+
 class SSHIntegrationTests(unittest.TestCase):
     """Solo se ejecutan al definir explícitamente SSH_TEST_ENABLED=1."""
 
@@ -119,6 +183,35 @@ class SSHIntegrationTests(unittest.TestCase):
             self.fail(f"La conexión SSH excedió el límite de tiempo: {error.timeout} segundos.")
         self.assertEqual(completed.returncode, 0, f"El comando SSH falló: {safe_ssh_failure_reason(completed.stderr)}.")
         self.assertTrue(completed.stdout.strip(), "El comando remoto whoami no devolvió un usuario.")
+
+    def _run_ssh(self, user: str, key_file: str) -> subprocess.CompletedProcess[str]:
+        command = [
+            self.config.executable, "-o", "BatchMode=yes", "-o", "PasswordAuthentication=no",
+            "-o", "StrictHostKeyChecking=yes", "-o", f"ConnectTimeout={self.config.timeout_seconds}",
+            "-i", key_file, "-p", str(self.config.port),
+        ]
+        if self.config.known_hosts_file:
+            command.extend(["-o", f"UserKnownHostsFile={self.config.known_hosts_file}"])
+        command.extend([f"{user}@{self.config.host}", "whoami"])
+        return subprocess.run(
+            command, capture_output=True, text=True, timeout=self.config.timeout_seconds + 5, check=False,
+        )
+
+    def test_unauthorized_key_is_rejected(self) -> None:
+        key_file = os.getenv("SSH_TEST_UNAUTHORIZED_KEY_FILE", "").strip()
+        if not key_file:
+            self.skipTest("Defina SSH_TEST_UNAUTHORIZED_KEY_FILE con una clave que NO esté autorizada.")
+        completed = self._run_ssh(self.config.user, key_file)
+        self.assertNotEqual(completed.returncode, 0, "El servidor aceptó una clave no autorizada.")
+        self.assertEqual(safe_ssh_failure_reason(completed.stderr), "autenticación por clave rechazada")
+
+    def test_user_outside_allowed_list_is_rejected(self) -> None:
+        user = os.getenv("SSH_TEST_UNAUTHORIZED_USER", "").strip()
+        if not user or user.startswith("-") or "@" in user:
+            self.skipTest("Defina SSH_TEST_UNAUTHORIZED_USER con una cuenta que no esté en AllowUsers.")
+        completed = self._run_ssh(user, str(self.config.private_key_file))
+        self.assertNotEqual(completed.returncode, 0, "El servidor aceptó a un usuario no autorizado.")
+        self.assertEqual(safe_ssh_failure_reason(completed.stderr), "autenticación por clave rechazada")
 
 
 if __name__ == "__main__":

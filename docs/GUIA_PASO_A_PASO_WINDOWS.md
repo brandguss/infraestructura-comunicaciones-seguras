@@ -1,6 +1,8 @@
 # Guía paso a paso para Windows y PowerShell
 
-Esta guía te lleva desde la preparación de Windows hasta la comprobación de cada parte del proyecto. Primero se prueban las comunicaciones en una sola computadora; después se preparan los certificados, los usuarios, la auditoría, la simulación IPsec y la integración SSH. Cada bloque explica para qué sirve, qué debe pasar en pantalla y cómo interpretar un error. Los archivos que contienen claves y datos de usuarios se guardan fuera del repositorio para evitar que terminen publicados en GitHub.
+Esta guía lleva el proyecto desde la preparación de Windows hasta la comprobación de cada requisito: TCP frente a TLS, PKI, usuarios y auditoría, IPsec simulado, SSH real, las dos VPN simuladas y la prueba entre dos computadoras. Cada bloque explica para qué sirve, qué debe verse en pantalla y cómo interpretar un error.
+
+Los archivos con claves, usuarios y registros se guardan fuera del repositorio (en `%USERPROFILE%\.infraestructura-comunicaciones-seguras`) para que no terminen publicados en GitHub. Las secciones 1 a 8 se hacen en orden; las secciones 9, 10 y 11 son independientes entre sí.
 
 ## 1. Descargar el proyecto y comprobar Python
 
@@ -15,7 +17,7 @@ python --version
 git status --short
 ```
 
-**Resultado esperado:** `git clone` termina sin errores y crea la carpeta del proyecto; `python --version` muestra Python 3.13 o una versión compatible. `git status --short` puede no mostrar nada si no hay cambios locales. Si ya tienes el proyecto en otra ubicación, sustituye la ruta asignada a `$project` por la carpeta real del repositorio.
+**Resultado esperado:** `git clone` termina sin errores y crea la carpeta del proyecto; `python --version` muestra Python 3.12 o superior. `git status --short` puede no mostrar nada si no hay cambios locales. Si ya tienes el proyecto en otra ubicación, sustituye la ruta asignada a `$project` por la carpeta real del repositorio.
 
 Abre dos terminales de PowerShell en VS Code. En cada terminal nueva, entra a la carpeta del proyecto antes de ejecutar los comandos de los siguientes pasos:
 
@@ -26,7 +28,7 @@ Set-Location $project
 
 Si `python` no se reconoce, instala Python desde python.org y marca **Add Python to PATH**; después cierra y vuelve a abrir VS Code. No necesitas instalar paquetes externos de Python para ejecutar las pruebas actuales, porque se utiliza la biblioteca estándar.
 
-No necesitas instalar paquetes externos de Python para ejecutar las pruebas actuales, porque se utiliza la biblioteca estándar. El siguiente comando busca los archivos de prueba dentro de `tests` y ejecuta cada caso encontrado. Sirve como primera comprobación: si falla aquí, conviene resolver ese error antes de iniciar servidores o configurar la red.
+El siguiente comando busca los archivos de prueba dentro de `tests` y ejecuta cada caso encontrado. Sirve como primera comprobación: si falla aquí, conviene resolver ese error antes de iniciar servidores o configurar la red.
 
 ```powershell
 python -m unittest discover -s tests -p "test*.py" -v
@@ -206,11 +208,18 @@ python -m unittest discover -s tests -p "test*.py" -v
 
 El resultado esperado para las pruebas automatizadas es cero fallos. Si SSH no está habilitado, su prueba de integración aparecerá como omitida por diseño. Una prueba omitida no equivale a una prueba aprobada.
 
-## 8. Configurar y probar la simulación educativa tipo IPsec
+## 8. Simulación de IPsec: modo transporte, modo túnel y anti-replay
 
-Este componente sirve para estudiar conceptos relacionados con IPsec desde el programa Python: identifica paquetes, calcula un HMAC para detectar cambios y permite probar el rechazo de mensajes repetidos. No cifra la carga ni crea una interfaz de red del sistema operativo, por lo que sus resultados comprueban la simulación y no un túnel VPN real. Para generar la clave se utiliza una ruta fuera del repositorio y se configura el mismo archivo en cliente y servidor.
+Este componente representa los conceptos de IPsec dentro del programa Python: cada mensaje viaja en un paquete con SPI y número de secuencia, protegido con un HMAC que detecta cualquier cambio, y el receptor mantiene una ventana anti-replay que descarta paquetes repetidos. No cifra el contenido (el HMAC garantiza integridad y autenticidad, no confidencialidad) y no crea una interfaz de red del sistema operativo, así que no es un túnel IPsec real.
 
-En una terminal, crea una clave externa nueva (el comando no sobrescribe una existente):
+Los dos modos se distinguen por la estructura del paquete:
+
+| Modo | Qué contiene el paquete |
+|---|---|
+| `transport` | Un solo encabezado con la carga (`payload_b64`): se protege el mensaje entre los dos extremos. |
+| `tunnel` | Un encabezado externo (`outer`, gateway a gateway) y un paquete interno completo (`inner`, con origen, destino y carga): se encapsula un paquete dentro de otro. |
+
+Crea una clave externa nueva (el comando no sobrescribe una existente):
 
 ```powershell
 $ipsec = Join-Path $env:USERPROFILE ".infraestructura-comunicaciones-seguras\ipsec"
@@ -219,7 +228,7 @@ $env:IPSEC_SIM_KEY_FILE = Join-Path $ipsec "ipsec_sim_key.json"
 python -m src.comunicaciones_seguras.ipsec_key_setup
 ```
 
-Para usar la simulación con el cliente y servidor, configura **en ambas terminales** la misma clave y el mismo SPI/modo. En el servidor TLS (Terminal 1):
+En la **Terminal 1** inicia el servidor TLS con la simulación activa. Para probar el modo túnel, detén el servidor, cambia `IPSEC_SIM_MODE` a `tunnel` en ambas terminales y vuelve a empezar.
 
 ```powershell
 $pki = Join-Path $env:USERPROFILE ".infraestructura-comunicaciones-seguras\pki"
@@ -239,7 +248,7 @@ $env:TLS_KEY_FILE = "$pki\server\server.key"
 python -m src.comunicaciones_seguras.tcp_server
 ```
 
-En el cliente (Terminal 2), configura los mismos valores de IPsec y TLS (además de la CA confiable):
+En la **Terminal 2** configura los mismos valores de IPsec y TLS, y envía el primer paquete:
 
 ```powershell
 $pki = Join-Path $env:USERPROFILE ".infraestructura-comunicaciones-seguras\pki"
@@ -248,6 +257,7 @@ $env:IPSEC_SIM_ENABLED = "1"
 $env:IPSEC_SIM_KEY_FILE = Join-Path $ipsec "ipsec_sim_key.json"
 $env:IPSEC_SIM_SPI = "LAB-01"
 $env:IPSEC_SIM_MODE = "transport"
+$env:IPSEC_SIM_SEQUENCE_START = "1"
 $env:COMMUNICATION_MODE = "tls"
 $env:TCP_HOST = "127.0.0.1"
 $env:TCP_PORT = "5001"
@@ -256,77 +266,331 @@ $env:TLS_SERVER_NAME = "localhost"
 python -m src.comunicaciones_seguras.tcp_client "Paquete de simulación"
 ```
 
-Para estudiar el modo túnel, detén el servidor y cambia `IPSEC_SIM_MODE` a `tunnel` tanto en el servidor como en el cliente antes de reiniciarlos. La misma configuración debe usarse en ambos extremos. Ejecuta las pruebas específicas con:
+**Resultado esperado:** `RECIBIDO: ...`, porque el servidor aceptó el paquete.
+
+### Demostración de replay con el cliente y el servidor
+
+Cada ejecución del cliente es un proceso nuevo y su contador de secuencia empieza en `IPSEC_SIM_SEQUENCE_START`. Mientras el servidor siga encendido, recuerda los números que ya aceptó. Esto permite demostrar el anti-replay con dos órdenes:
+
+```powershell
+# Mismo número de secuencia que el paquete anterior: el servidor lo trata como repetido.
+python -m src.comunicaciones_seguras.tcp_client "Paquete repetido"
+```
+
+**Resultado esperado:** `ERROR: paquete de simulacion rechazado`, y en `audit.jsonl` un evento `ipsec_sim` con motivo `ipsec_replay_duplicate`. Para enviar un paquete legítimo nuevo, cambia el número inicial a uno que el servidor no haya visto:
+
+```powershell
+$env:IPSEC_SIM_SEQUENCE_START = "100"
+python -m src.comunicaciones_seguras.tcp_client "Paquete nuevo"
+```
+
+**Resultado esperado:** `RECIBIDO: ...`. Si necesitas empezar de cero, reinicia el servidor (la ventana anti-replay vive en memoria). La misma lógica se comprueba de forma automática, incluidos los paquetes alterados y la ventana de secuencias fuera de orden:
 
 ```powershell
 python -m unittest discover -s tests -p "test_ipsec_sim.py" -v
 ```
 
-## 9. Integración SSH real con OpenSSH (opcional)
+## 9. Administración remota con SSH (OpenSSH real)
 
-Esta prueba comprueba una conexión SSH real mediante OpenSSH, no una simulación en Python. Para que funcione, el servidor debe estar activo, la cuenta de destino debe autorizar la clave pública y el cliente debe reconocer la clave de identidad del servidor. El hecho de que el servicio `sshd` esté encendido solo confirma que escucha; no demuestra que la autenticación por clave ya esté configurada.
+Aquí se usa un servidor OpenSSH real, no una simulación. Se configuran los tres controles que pide el requisito: autenticación por clave pública, restricción de acceso a usuarios autorizados (`AllowUsers`) y registro de intentos (`LogLevel VERBOSE`). Además, el cliente administrativo del proyecto (`ssh_admin.py`) deja cada intento en `audit.jsonl`.
 
-Genera una clave dedicada para este laboratorio (si no existe):
+Abre PowerShell **como administrador** para los pasos 9.1 y 9.2, porque modifican el servicio `sshd`.
+
+### 9.1 Instalar y arrancar el servidor OpenSSH
+
+```powershell
+Get-WindowsCapability -Online | Where-Object Name -like "OpenSSH.Server*"
+Add-WindowsCapability -Online -Name "OpenSSH.Server~~~~0.0.1.0"
+Set-Service -Name sshd -StartupType Automatic
+Start-Service sshd
+Get-Service sshd
+```
+
+**Resultado esperado:** el servicio `sshd` aparece como `Running`. Si ya estaba instalado, `Add-WindowsCapability` lo indica y puedes continuar.
+
+### 9.2 Restringir usuarios, desactivar contraseñas y activar el registro
+
+Las directivas deben quedar **antes** del bloque `Match Group administrators` que trae el archivo por defecto; si se agregan al final, solo afectarían a ese bloque. Este script crea un respaldo, inserta las líneas en el lugar correcto y reinicia el servicio:
+
+```powershell
+$cfg = Join-Path $env:ProgramData "ssh\sshd_config"
+Copy-Item $cfg "$cfg.respaldo" -Force
+$nuevas = @("PubkeyAuthentication yes", "PasswordAuthentication no", "AllowUsers $env:USERNAME", "LogLevel VERBOSE")
+$lineas = @(Get-Content $cfg)
+$match = $lineas | Select-String -Pattern '^\s*Match\s' | Select-Object -First 1
+if ($match) {
+    $i = $match.LineNumber - 1
+    $lineas = @($lineas[0..($i - 1)]) + $nuevas + @($lineas[$i..($lineas.Count - 1)])
+} else {
+    $lineas = $lineas + $nuevas
+}
+Set-Content -Path $cfg -Value $lineas -Encoding ascii
+Restart-Service sshd
+& "$env:SystemRoot\System32\OpenSSH\sshd.exe" -T | Select-String "^(allowusers|passwordauthentication|pubkeyauthentication|loglevel) "
+```
+
+**Resultado esperado:** la última orden muestra `allowusers` con tu usuario, `passwordauthentication no`, `pubkeyauthentication yes` y `loglevel VERBOSE`. Si falta alguna, revisa el archivo y repite. Para deshacer los cambios, copia `sshd_config.respaldo` sobre `sshd_config` y reinicia el servicio.
+
+### 9.3 Crear la clave autorizada y la clave no autorizada
 
 ```powershell
 $sshDir = Join-Path $env:USERPROFILE ".ssh"
 New-Item -ItemType Directory -Force $sshDir | Out-Null
 $key = Join-Path $sshDir "id_ed25519_sdi"
-if (-not (Test-Path $key)) { ssh-keygen -t ed25519 -f $key -C "sdi-lab" }
+$otra = Join-Path $sshDir "id_ed25519_no_autorizada"
+if (-not (Test-Path $key)) { ssh-keygen -t ed25519 -f $key -C "sdi-lab" -N '""' }
+if (-not (Test-Path $otra)) { ssh-keygen -t ed25519 -f $otra -C "no-autorizada" -N '""' }
 ```
 
-Instala la clave pública en el archivo `authorized_keys` del usuario de destino y verifica manualmente que puedes conectar sin contraseña interactiva y sin omitir la verificación del host. Para una prueba local, la clave pública debe autorizarse en la cuenta local a la que te conectarás. No configures `StrictHostKeyChecking=no`.
+Autoriza **solo** la primera clave. Si tu cuenta pertenece al grupo Administradores, OpenSSH para Windows lee `administrators_authorized_keys`, que debe tener permisos restringidos; si no, usa `authorized_keys` en tu perfil:
 
-Cuando la conexión de clave esté preparada, define:
+```powershell
+$pub = Get-Content "$key.pub"
+$esAdmin = [bool]((whoami /groups) -match "S-1-5-32-544")
+if ($esAdmin) {
+    $destino = Join-Path $env:ProgramData "ssh\administrators_authorized_keys"
+    Add-Content -Path $destino -Value $pub -Encoding ascii
+    icacls $destino /inheritance:r /grant "Administrators:F" /grant "SYSTEM:F" | Out-Null
+} else {
+    $destino = Join-Path $sshDir "authorized_keys"
+    Add-Content -Path $destino -Value $pub -Encoding ascii
+}
+"Clave autorizada en: $destino"
+```
+
+Registra la identidad del servidor para poder conectar sin desactivar la verificación del host:
+
+```powershell
+$known = Join-Path $sshDir "known_hosts_sdi"
+ssh-keyscan -t ed25519 localhost | Set-Content -Path $known -Encoding ascii
+```
+
+### 9.4 Acceso autorizado y no autorizado
+
+Abre una terminal normal en la carpeta del proyecto. Estas variables las usan tanto el cliente administrativo como las pruebas:
+
+```powershell
+$auth = Join-Path $env:USERPROFILE ".infraestructura-comunicaciones-seguras\auth"
+$sshDir = Join-Path $env:USERPROFILE ".ssh"
+$env:AUDIT_LOG_FILE = Join-Path $auth "audit.jsonl"
+$env:SSH_TEST_HOST = "localhost"
+$env:SSH_TEST_USER = $env:USERNAME
+$env:SSH_TEST_PRIVATE_KEY_FILE = Join-Path $sshDir "id_ed25519_sdi"
+$env:SSH_TEST_KNOWN_HOSTS_FILE = Join-Path $sshDir "known_hosts_sdi"
+$env:SSH_TEST_PORT = "22"
+python -m src.comunicaciones_seguras.ssh_admin --command whoami
+```
+
+**Resultado esperado:** `ACEPTADO: usuario@localhost:22 -> whoami: ...`. Ahora repite el intento con la clave que no está autorizada:
+
+```powershell
+$env:SSH_TEST_PRIVATE_KEY_FILE = Join-Path $sshDir "id_ed25519_no_autorizada"
+python -m src.comunicaciones_seguras.ssh_admin --command whoami
+$env:SSH_TEST_PRIVATE_KEY_FILE = Join-Path $sshDir "id_ed25519_sdi"
+```
+
+**Resultado esperado:** `RECHAZADO: ... autenticación por clave rechazada`. La tercera línea restaura la variable.
+
+### 9.5 Ver el registro de intentos
+
+El registro del proyecto muestra quién intentó administrar el equipo y con qué resultado; no contiene rutas ni claves:
+
+```powershell
+Get-Content $env:AUDIT_LOG_FILE | Select-String '"operation": "ssh:'
+```
+
+El servidor OpenSSH guarda además su propio registro de conexiones en el Visor de eventos (Aplicaciones y servicios > OpenSSH > Operational). Para consultarlo desde PowerShell:
+
+```powershell
+Get-WinEvent -LogName "OpenSSH/Operational" -MaxEvents 20 | Select-Object TimeCreated, Message | Format-List
+```
+
+**Resultado esperado:** eventos de conexión aceptada para la clave autorizada y de autenticación fallida para la otra.
+
+### 9.6 Pruebas automatizadas de integración
+
+Con las variables del paso anterior definidas, habilita las pruebas reales y añade la clave no autorizada:
 
 ```powershell
 $env:SSH_TEST_ENABLED = "1"
-$env:SSH_TEST_HOST = "localhost"
-$env:SSH_TEST_USER = "$env:USERNAME"
-$env:SSH_TEST_PRIVATE_KEY_FILE = Join-Path $env:USERPROFILE ".ssh\id_ed25519_sdi"
-$env:SSH_TEST_PORT = "22"
-$env:SSH_TEST_TIMEOUT = "15"
+$env:SSH_TEST_UNAUTHORIZED_KEY_FILE = Join-Path $sshDir "id_ed25519_no_autorizada"
 python -m unittest discover -s tests -p "test_ssh.py" -v
 ```
 
-Si no se ha preparado la clave, el usuario remoto o la confianza del host, deja la prueba deshabilitada; la suite de pruebas unitarias de configuración seguirá siendo ejecutable. No es seguro desactivar la comprobación de identidad del servidor solo para que pase el test.
+**Resultado esperado:** las pruebas locales pasan siempre, `test_remote_whoami` confirma el acceso autorizado y `test_unauthorized_key_is_rejected` confirma el rechazo. Para probar también que una cuenta fuera de `AllowUsers` es rechazada, crea una cuenta local sin privilegios y defínela:
 
-## 10. Ejecución desde dos computadoras de la misma red
+```powershell
+New-LocalUser -Name "intruso-lab" -Password (Read-Host -AsSecureString "Contraseña para intruso-lab") -Description "Cuenta de prueba SSH"
+$env:SSH_TEST_UNAUTHORIZED_USER = "intruso-lab"
+python -m unittest discover -s tests -p "test_ssh.py" -v
+```
 
-Cuando las pruebas locales funcionan, puedes repetirlas entre dos computadoras conectadas a una red privada. `127.0.0.1` siempre apunta al propio equipo, por lo que en una prueba entre computadoras debe usarse la IP del servidor. El servidor debe escuchar en una interfaz accesible y el firewall debe permitir únicamente el tráfico necesario desde la red de laboratorio.
+La prueba `test_user_outside_allowed_list_is_rejected` pasa porque `AllowUsers` solo incluye tu usuario. Elimina la cuenta al terminar con `Remove-LocalUser -Name "intruso-lab"`. Si `SSH_TEST_ENABLED` no está definida, las pruebas de integración se omiten y solo corren las locales; una prueba omitida no cuenta como aprobada.
 
-1. En la computadora servidor, elige una IP privada fija o reservada en el router.
-2. Configura `TCP_HOST=0.0.0.0` en el servidor para escuchar en interfaces IPv4 locales y conserva el puerto `5001` para TLS.
-3. En el firewall de Windows, permite el puerto TCP solo en el perfil/red privada y desde la IP cliente esperada. No desactives el firewall.
-4. El cliente configura `TCP_HOST` con la IP real del servidor y `TLS_SERVER_NAME` con un nombre que figure en el SAN del certificado. Si se conecta por IP, el certificado debe incluir esa IP como SAN.
-5. Copia al cliente solo el certificado público de la CA (`root-ca.crt`), nunca la clave privada de la CA ni la clave privada del servidor.
-6. Ejecuta primero la prueba TLS normal; luego la prueba con CA no confiable. Documenta el resultado y la IP/puerto utilizados.
+## 10. Cliente y servidor en computadoras diferentes
 
-No expongas el puerto a Internet ni uses la CA de laboratorio para sistemas reales.
+Las secciones 4 y 5 usan `127.0.0.1`, que siempre apunta al mismo equipo. Para cumplir el requisito de dos computadoras, repite TCP y TLS con dos equipos conectados a la misma red de laboratorio. Los comandos están separados por equipo.
 
-## 11. VPN de acceso remoto y VPN sitio a sitio: diferencia importante
+### 10.1 En la computadora servidor
 
-La simulación del paso anterior y una VPN real son comprobaciones diferentes. Para una VPN de acceso remoto, un usuario conecta su equipo al gateway y recibe acceso a las redes autorizadas. En una VPN sitio a sitio, dos gateways protegen el tráfico entre dos redes. La guía de strongSwan contiene configuraciones de ejemplo, pero para demostrar el túnel se deben adaptar las direcciones y secretos al laboratorio, levantar ambos extremos y confirmar que el tráfico pasa por la conexión IPsec.
+Obtén la IPv4 de la red de laboratorio y comprueba que sea la correcta:
 
-Una prueba de túnel no se puede demostrar únicamente con el eco TCP ni con la simulación. No se presenta este proyecto como VPN real hasta que se configure un gateway real y se compruebe conectividad entre las redes a través del túnel. Las plantillas de configuración deben adaptarse a las redes reales, sin publicar claves privadas ni PSK.
+```powershell
+$serverIp = Get-NetIPAddress -AddressFamily IPv4 |
+    Where-Object { $_.InterfaceAlias -notmatch "Loopback" -and $_.IPAddress -notlike "169.254.*" } |
+    Select-Object -First 1 -ExpandProperty IPAddress
+"IP del servidor: $serverIp"
+```
 
-## 13. Solución de problemas frecuentes
+Si el equipo tiene varios adaptadores y la IP mostrada no es la de la red de laboratorio, revisa `ipconfig` y asigna la correcta a `$serverIp`.
+
+El certificado de la sección 3 solo cubre `localhost` y `127.0.0.1`. Genera uno nuevo cuyo SAN incluya la IP del servidor y fírmalo con la misma CA (la clave de la CA se queda en este equipo):
+
+```powershell
+$pki = Join-Path $env:USERPROFILE ".infraestructura-comunicaciones-seguras\pki"
+$openssl = if (Get-Command openssl -ErrorAction SilentlyContinue) { "openssl" } else { "C:\Program Files\OpenSSL-Win64\bin\openssl.exe" }
+& $openssl genrsa -out "$pki\server\server-lan.key" 2048
+& $openssl req -new -key "$pki\server\server-lan.key" -out "$pki\server\server-lan.csr" -subj "/CN=$serverIp"
+@"
+subjectAltName=DNS:localhost,IP:127.0.0.1,IP:$serverIp
+basicConstraints=critical,CA:FALSE
+keyUsage=critical,digitalSignature,keyEncipherment
+extendedKeyUsage=serverAuth
+"@ | Set-Content -Encoding ascii "$pki\server\server-lan-extensions.cnf"
+& $openssl x509 -req -in "$pki\server\server-lan.csr" -CA "$pki\ca\root-ca.crt" -CAkey "$pki\ca\root-ca.key" -CAcreateserial -out "$pki\server\server-lan.crt" -days 365 -sha256 -extfile "$pki\server\server-lan-extensions.cnf"
+```
+
+Abre el puerto solo para la red privada y solo desde la computadora cliente (como administrador):
+
+```powershell
+$clientIp = Read-Host "IP de la computadora cliente"
+New-NetFirewallRule -DisplayName "Lab comunicaciones seguras" -Direction Inbound -Protocol TCP -LocalPort 5000,5001 -Profile Private -RemoteAddress $clientIp -Action Allow
+```
+
+Inicia el servidor TCP sin cifrado (Terminal 1):
+
+```powershell
+$env:COMMUNICATION_MODE = "tcp"
+$env:TCP_HOST = "0.0.0.0"
+$env:TCP_PORT = "5000"
+python -m src.comunicaciones_seguras.tcp_server
+```
+
+`0.0.0.0` significa «escuchar en todas las interfaces»; no es la dirección que usa el cliente. Cuando termines la prueba TCP, detén el servidor con `Ctrl+C` y arranca el TLS:
+
+```powershell
+$env:COMMUNICATION_MODE = "tls"
+$env:TCP_HOST = "0.0.0.0"
+$env:TCP_PORT = "5001"
+$env:TLS_CERT_FILE = "$pki\server\server-lan.crt"
+$env:TLS_KEY_FILE = "$pki\server\server-lan.key"
+python -m src.comunicaciones_seguras.tcp_server
+```
+
+### 10.2 En la computadora cliente
+
+Copia desde el servidor **solo** `root-ca.crt` (certificado público de la CA) a una carpeta del cliente, por ejemplo con una memoria USB. Nunca copies `root-ca.key` ni `server-lan.key`. Después, en la carpeta del proyecto del cliente:
+
+```powershell
+$serverIp = Read-Host "IP del servidor"
+$caFile = Read-Host "Ruta completa de root-ca.crt en esta computadora"
+$env:COMMUNICATION_MODE = "tcp"
+$env:TCP_HOST = $serverIp
+$env:TCP_PORT = "5000"
+python -m src.comunicaciones_seguras.tcp_client "Prueba TCP entre equipos"
+```
+
+**Resultado esperado:** `RECIBIDO: Prueba TCP entre equipos`. Esta comunicación **no está cifrada**. Para la versión protegida:
+
+```powershell
+$env:COMMUNICATION_MODE = "tls"
+$env:TCP_PORT = "5001"
+$env:TLS_CA_FILE = $caFile
+$env:TLS_SERVER_NAME = $serverIp
+python -m src.comunicaciones_seguras.tcp_client "Prueba TLS entre equipos"
+```
+
+**Resultado esperado:** `Conexión TLS validada con <IP>:5001` y `RECIBIDO: Prueba TLS entre equipos`. Para ver el rechazo, apunta `TLS_CA_FILE` a otro certificado de CA (por ejemplo `other-ca.crt` de la sección 3, copiado al cliente) y repite: debe aparecer `CERTIFICATE_VERIFY_FAILED`. No desactives la validación para que desaparezca un error.
+
+### 10.3 Evidencia recomendada de la comparación
+
+Instala Wireshark en uno de los dos equipos, captura en la interfaz de la red de laboratorio y repite las dos pruebas. Con el filtro `tcp.port == 5000` se lee el mensaje en texto claro; con `tcp.port == 5001` solo se ven registros TLS cifrados. Guarda capturas de pantalla de ambos filtros y de las terminales de los dos equipos mostrando su IP (`ipconfig`).
+
+### 10.4 Qué terminal debe permanecer abierta
+
+- **Terminal 1 (servidor):** se mantiene ejecutando `tcp_server`; aquí se ven los mensajes de inicio y los rechazos.
+- **Terminal 2 (cliente):** ejecuta `tcp_client` una vez por mensaje.
+- **Terminal de pruebas:** cuando no necesites un servidor abierto, ejecuta la suite en la raíz del repositorio. Las variables `TLS_TEST_*` y `SSH_TEST_*` deben definirse en esa misma terminal.
+
+## 11. VPN de acceso remoto y VPN sitio a sitio
+
+El requisito pide **representar** ambas VPN y distinguirlas. El módulo `src/comunicaciones_seguras/vpn_sim.py` lo hace en software: no crea túneles del sistema operativo, pero reproduce lo que diferencia a cada escenario.
+
+| | VPN de acceso remoto | VPN sitio a sitio |
+|---|---|---|
+| Qué conecta | Un usuario remoto con una red privada | Dos redes completas entre sí |
+| Autenticación | Usuario y contraseña de cada persona (scrypt) | Clave precompartida entre gateways |
+| Autorización | Por rol, **después** de conectar | Por subredes de origen y destino |
+| Dirección interna | IP virtual asignada a la sesión | Los equipos conservan su IP de LAN |
+| Protección de paquetes | Sesión autenticada con vigencia | IPsec simulado en modo túnel con anti-replay |
+
+### 11.1 Ejecutar la demostración
+
+```powershell
+$auth = Join-Path $env:USERPROFILE ".infraestructura-comunicaciones-seguras\auth"
+$env:AUDIT_LOG_FILE = Join-Path $auth "audit.jsonl"
+python -m src.comunicaciones_seguras.vpn_demo
+```
+
+La demostración usa tres usuarios temporales en memoria (`admin`, `operador`, `consulta`) con contraseñas de demostración que no se guardan en archivos. Si `AUDIT_LOG_FILE` no está definida, usa un archivo temporal. Muestra, en este orden:
+
+1. **Autenticación:** una contraseña incorrecta se rechaza; el usuario `consulta` se conecta y recibe una IP virtual.
+2. **Restricciones posteriores a la conexión:** `consulta` alcanza `intranet-web`, pero `servidor-archivos` y `panel-administracion` se rechazan con `privilegios_insuficientes`. `admin` alcanza todos los recursos, y después de desconectarse su sesión ya no sirve.
+3. **Bloqueo por intentos fallidos:** tras tres contraseñas incorrectas, `operador` queda bloqueado temporalmente aunque ahora use la contraseña correcta.
+4. **Sitio a sitio:** tráfico válido en ambos sentidos entre `10.10.0.0/24` y `10.20.0.0/24`, con el paquete en modo túnel (encabezado externo e interno).
+5. **Ataques al túnel:** reenvío de un paquete capturado (replay), alteración del contenido e inyección desde un gateway con otra clave; los tres se rechazan.
+6. **Política de subredes:** tráfico hacia `8.8.8.8` o desde un origen que no pertenece a ningún sitio se rechaza.
+7. La comparación de escenarios y el registro de auditoría generado.
+
+### 11.2 Pruebas automatizadas
+
+```powershell
+python -m unittest discover -s tests -p "test_vpn_sim.py" -v
+```
+
+**Resultado esperado:** todas las pruebas pasan. Cubren credenciales válidas e inválidas, acceso según el rol, expiración y revocación de sesiones, bloqueo, replay, alteración, clave incorrecta, política de subredes, y que el servicio no concede acceso si no puede escribir la auditoría.
+
+### 11.3 VPN real con strongSwan (opcional)
+
+Una VPN real necesita dos gateways con redes propias y no se puede validar con `unittest`. La guía [VPN_IPSEC_REAL_STRONGSWAN.md](VPN_IPSEC_REAL_STRONGSWAN.md) contiene configuraciones de ejemplo para sitio a sitio y para acceso remoto IKEv2. Úsala solo si dispones de ese laboratorio y guarda como evidencia el estado del túnel y los contadores de tráfico.
+
+## 12. Solución de problemas frecuentes
 
 | Síntoma | Comprobación |
 |---|---|
 | `python` no se reconoce | Reinstala Python con PATH habilitado y reinicia la terminal de VS Code. |
 | `Address already in use` | Otra ejecución ocupa el puerto. Detén el proceso anterior o usa otro `TCP_PORT` en ambos extremos. |
 | `Connection refused` | Confirma que el servidor sigue ejecutándose y que el cliente usa la misma IP y puerto. |
+| Conexión entre equipos agotada | Revisa la IP, que ambos equipos estén en la misma red y la regla de firewall del paso 10.1. |
 | Error TLS de CA | Revisa `TLS_CA_FILE` y que sea el certificado público de la CA que firmó el servidor. |
-| Error de nombre TLS | `TLS_SERVER_NAME` debe coincidir con DNS/IP del SAN del certificado. |
+| Error de nombre TLS | `TLS_SERVER_NAME` debe coincidir con un DNS o IP del SAN del certificado (`server-lan.crt` para pruebas entre equipos). |
 | Operación protegida denegada por configuración | Configura `AUTH_USERS_FILE` y `AUDIT_LOG_FILE` en el servidor y reinícialo. |
-| Prueba TLS omitida | Define las variables `TLS_TEST_*` del paso 7 en la terminal donde ejecutas unittest. |
-| Prueba SSH omitida | Es normal mientras `SSH_TEST_ENABLED` no sea `1`. Para habilitarla, completa todo el paso 9. |
-| Simulación rechazada | Cliente y servidor deben usar la misma clave, SPI y modo; revisa también el archivo de auditoría. |
+| `ERROR: paquete de simulacion rechazado` en la segunda ejecución del cliente | Es el anti-replay: el número de secuencia ya fue aceptado. Cambia `IPSEC_SIM_SEQUENCE_START` o reinicia el servidor (sección 8). |
+| Simulación rechazada desde el primer paquete | Cliente y servidor deben usar la misma clave, SPI y modo; revisa `audit.jsonl`. |
+| Prueba TLS omitida | Define las variables `TLS_TEST_*` de la sección 7 en la terminal donde ejecutas `unittest`. |
+| Prueba SSH omitida | Es lo esperado mientras `SSH_TEST_ENABLED` no sea `1`. Para habilitarla, completa la sección 9. |
+| SSH: `Permission denied` con la clave correcta | Si tu cuenta es de administrador, la clave debe estar en `administrators_authorized_keys` con los permisos del paso 9.3. |
+| SSH: `Host key verification failed` | Regenera `known_hosts_sdi` con `ssh-keyscan` (paso 9.3). No desactives la verificación. |
 
-## 14. Cierre seguro
+## 13. Cierre seguro
 
-Al terminar, detén cada servidor con `Ctrl+C`. Los siguientes comandos permiten revisar los cambios antes de publicarlos: `git status --short` lista los archivos modificados, `git diff --check` busca problemas de espacios y formato, y `git diff` muestra el contenido que se va a incluir. Antes de hacer commit, confirma que no aparezcan claves privadas, contraseñas, archivos de usuarios ni registros de auditoría.
+Al terminar, detén cada servidor con `Ctrl+C`. Si abriste reglas de firewall o creaste la cuenta de prueba SSH, elimínalas:
+
+```powershell
+Remove-NetFirewallRule -DisplayName "Lab comunicaciones seguras" -ErrorAction SilentlyContinue
+```
+
+Antes de publicar cambios revisa qué se va a subir. `git status --short` lista los archivos modificados, `git diff --check` busca errores de formato y `git diff` muestra el contenido. Confirma que no aparezcan claves privadas (`.key`, `.pem`), contraseñas, archivos de usuarios, registros de auditoría ni claves de simulación.
 
 ```powershell
 git status --short
@@ -334,134 +598,46 @@ git diff --check
 git diff
 ```
 
-Antes de hacer commit, revisa que no haya archivos `.key`, `.pem`, usuarios, auditorías ni claves de simulación dentro del repositorio. Esta guía describe un laboratorio académico; no es una certificación de seguridad ni una receta de despliegue en producción.
+Esta guía describe un laboratorio académico; no es una certificación de seguridad ni una receta de despliegue en producción.
 
+## 14. Comprobación final de los requisitos
 
-## 15. Comprobación final de los requisitos
-
-Cuando hayas terminado las secciones anteriores, ejecuta las comprobaciones en este orden. La idea es confirmar cada función por separado y conservar una evidencia clara, en vez de asumir que todo funciona porque el servidor inició sin errores.
-
-Primero ejecuta las pruebas unitarias de TCP, autenticación, autorización y simulación IPsec. El comando debe terminar con `OK`; cualquier `FAIL` o `ERROR` significa que hay que revisar el caso que aparece unas líneas antes del resumen. Una prueba marcada como `skipped` no se ejecutó y debe explicarse en la entrega.
+Ejecuta la suite con todas las variables de entorno definidas para que ninguna prueba quede omitida. En una misma terminal:
 
 ```powershell
-python -m unittest discover -s tests -p "test*.py" -v
-```
-
-Después, en la misma terminal, define las rutas de los certificados que generaste y ejecuta nuevamente la suite. Esta segunda ejecución permite comprobar los casos TLS que dependen de archivos externos, incluido el rechazo de una CA no confiable.
-
-```powershell
-$pki = Join-Path $env:USERPROFILE ".infraestructura-comunicaciones-seguras\pki"
+$base = Join-Path $env:USERPROFILE ".infraestructura-comunicaciones-seguras"
+$pki = Join-Path $base "pki"
+$sshDir = Join-Path $env:USERPROFILE ".ssh"
 $env:TLS_TEST_CA_FILE = "$pki\ca\root-ca.crt"
 $env:TLS_TEST_CERT_FILE = "$pki\server\server.crt"
 $env:TLS_TEST_KEY_FILE = "$pki\server\server.key"
 $env:TLS_TEST_SERVER_NAME = "localhost"
 $env:TLS_TEST_UNTRUSTED_CA_FILE = "$pki\untrusted-ca\other-ca.crt"
-python -m unittest discover -s tests -p "test*.py" -v
+$env:SSH_TEST_ENABLED = "1"
+$env:SSH_TEST_HOST = "localhost"
+$env:SSH_TEST_USER = $env:USERNAME
+$env:SSH_TEST_PRIVATE_KEY_FILE = Join-Path $sshDir "id_ed25519_sdi"
+$env:SSH_TEST_KNOWN_HOSTS_FILE = Join-Path $sshDir "known_hosts_sdi"
+$env:SSH_TEST_UNAUTHORIZED_KEY_FILE = Join-Path $sshDir "id_ed25519_no_autorizada"
+python -m unittest discover -s tests -p "test*.py" -v 2>&1 | Out-File -Encoding utf8 -FilePath ".\resultado_pruebas.txt"
+Get-Content ".\resultado_pruebas.txt" -Tail 6
 ```
 
-En la salida, confirma que no haya fallos y que la prueba de certificado no confiable ya no aparezca como omitida. Si una prueba TLS falla, comprueba las rutas, la vigencia del certificado y que el certificado incluya el nombre utilizado por el cliente.
+`Out-File -Encoding utf8` evita que el archivo quede en UTF-16, que muchos visores no abren bien. El resumen final debe indicar `OK` y ninguna prueba omitida (`skipped`) salvo la de `SSH_TEST_UNAUTHORIZED_USER`, que es opcional. Una prueba omitida no equivale a una prueba aprobada.
 
-La siguiente tabla sirve para relacionar cada requisito con una prueba observable. Marca cada fila únicamente después de haber obtenido el resultado indicado.
+La tabla relaciona cada requisito con la comprobación y el resultado que lo confirma. Marca cada fila solo después de obtener el resultado.
 
-| Requisito | Prueba que debes ejecutar | Resultado que confirma la función |
+| Requisito | Qué ejecutar | Resultado que lo confirma |
 |---|---|---|
-| Comunicación TCP | Sección 4, cliente y servidor en terminales separadas | El cliente recibe la respuesta `RECIBIDO:`. |
-| Comunicación cifrada TLS | Sección 5, usando la CA de laboratorio | El cliente valida el certificado y recibe la respuesta. |
-| Validación de identidad del servidor | Pruebas TLS con `TLS_TEST_SERVER_NAME=localhost` | La conexión con el nombre correcto funciona; la prueba de nombre incorrecto es rechazada. |
-| Rechazo de una CA no confiable | Pruebas TLS con `TLS_TEST_UNTRUSTED_CA_FILE` | El caso de certificado no confiable se ejecuta y pasa al comprobar el rechazo. |
-| Autenticación | Sección 6 y prueba con una cuenta existente | Una contraseña válida permite autenticarse; una inválida no debe autorizar la operación. |
-| Autorización por rol | Sección 6, primero `admin_info` como `admin`, luego `list_resources` como `consulta` | La operación permitida se acepta y la operación sin permisos se rechaza. |
-| Auditoría | Inspecciona `$auth\audit.jsonl` después de las dos operaciones | Se guardan eventos relevantes y no aparecen contraseñas. |
-| Simulación IPsec | Sección 8 y pruebas `test_ipsec_sim.py` | Pasan las pruebas de integridad, modo configurado y anti-replay que define el módulo. Esto no prueba una VPN real. |
-| Integración SSH | Sección 9, solo después de autorizar la clave pública y confiar en el host | La prueba de integración termina correctamente sin desactivar la validación de la identidad del servidor. |
-| VPN sitio a sitio | Guía `VPN_IPSEC_REAL_STRONGSWAN.md`, dos gateways y hosts en ambas LAN | El túnel se establece, aumentan los contadores de tráfico y los hosts de ambas subredes se comunican. |
-| VPN de acceso remoto | Guía `VPN_IPSEC_REAL_STRONGSWAN.md`, cliente y gateway configurados | El usuario se autentica, recibe una IP del pool y llega solo a los recursos autorizados. |
+| 1. Cliente y servidor, TCP frente a TLS, en computadoras diferentes | Secciones 4, 5 y 10 | TCP responde `RECIBIDO:` y se lee en claro en la captura; TLS responde y la captura solo muestra registros cifrados. |
+| 2. TLS y validación de certificados | Sección 5 y pruebas `test_tls.py` | Conexión válida; nombre incorrecto y CA no confiable rechazados. |
+| 3. PKI y cadena de confianza | Sección 3 y pruebas TLS | El certificado del servidor lo firma la CA de laboratorio y el cliente solo confía en esa CA. |
+| 4. SSH: autenticación, restricción y registro | Sección 9 y `test_ssh.py` | Acceso autorizado aceptado; clave y usuario no autorizados rechazados; intentos en `audit.jsonl` y en el registro de OpenSSH. |
+| 5. IPsec: transporte, túnel y replay | Sección 8 y `test_ipsec_sim.py` | Ambos modos funcionan; el paquete repetido y el alterado se rechazan y se auditan. |
+| 6. VPN de acceso remoto | Sección 11 (`vpn_demo` y `test_vpn_sim.py`) | Usuario autenticado, IP virtual, acceso limitado por rol, sesión revocable. |
+| 7. VPN sitio a sitio | Sección 11 (`vpn_demo` y `test_vpn_sim.py`) | Tráfico entre dos subredes en modo túnel, sin usuarios, con política por subred. |
+| 8. Autenticación, autorización y registro | Sección 6 y `test_auth.py` | Contraseña inválida rechazada; operación sin permiso rechazada; eventos permitidos y denegados en `audit.jsonl`, sin contraseñas. |
+| 9. Pruebas de seguridad | Suite completa | Resumen con `OK` y sin pruebas omitidas inesperadas. |
+| 10. Documentación | `README.md` y esta guía | Arquitectura, ejecución, función de cada mecanismo, diferencias y limitaciones. |
 
-Las pruebas de TCP, TLS, usuarios, permisos y simulación se pueden ejecutar en la misma computadora. SSH necesita una cuenta y una clave autorizadas. Las VPN necesitan máquinas o gateways con redes reales; no es posible demostrar esos dos requisitos con solo ejecutar `unittest` en una computadora. Si no tienes dos gateways, deja documentado que la guía de configuración está preparada pero el túnel no se ha validado físicamente, en lugar de presentar una prueba de simulación como si fuera una conexión VPN.
-
-Para guardar un resumen de la suite en un archivo de evidencia, puedes ejecutar:
-
-```powershell
-python -m unittest discover -s tests -p "test*.py" -v 2>&1 | Tee-Object -FilePath ".\resultado_pruebas.txt"
-```
-
-El archivo `resultado_pruebas.txt` contiene la salida de la ejecución y se puede revisar junto con las capturas de las terminales. Antes de publicarlo, comprueba que no incluya rutas privadas que no quieras compartir ni datos sensibles.
-
-
-## 16. Cómo usar las terminales y probar desde dos computadoras
-
-Las primeras pruebas de las secciones 4 y 5 usan `127.0.0.1`. Esto es útil para comprobar que el programa arranca y que cliente y servidor se entienden, pero ambos procesos están en la misma computadora. Para demostrar el requisito de la práctica, repite TCP y TLS con dos equipos diferentes conectados a la misma red de laboratorio.
-
-### Preparación de la computadora servidor
-
-En el equipo que ejecutará el servidor, abre PowerShell y consulta la dirección IPv4:
-
-```powershell
-ipconfig
-```
-
-Identifica la dirección IPv4 del adaptador conectado a la red de laboratorio; por ejemplo, en los siguientes comandos se usa `192.168.1.50` como ejemplo. Sustitúyela por la dirección real del servidor. No copies esa dirección de ejemplo sin comprobarla.
-
-En la **Terminal 1 del servidor**, entra en la carpeta del proyecto y configura el servidor para escuchar en las interfaces de red:
-
-```powershell
-Set-Location "RUTA\infraestructura-comunicaciones-seguras"
-$env:COMMUNICATION_MODE = "tcp"
-$env:TCP_HOST = "0.0.0.0"
-$env:TCP_PORT = "5000"
-python -m src.comunicaciones_seguras.tcp_server
-```
-
-`0.0.0.0` indica al servidor que escuche en las interfaces IPv4 disponibles; no es la dirección que debe usar el cliente. Mantén abierta esta terminal mientras haces la prueba.
-
-En el firewall de Windows crea una regla de entrada para el puerto TCP que vas a probar y limita el origen a la red privada del laboratorio. No abras el puerto a redes públicas. Si el cliente no logra conectar, comprueba primero que ambos equipos estén en la misma red, que la dirección IPv4 sea correcta y que el firewall permita la conexión.
-
-### Prueba TCP desde la computadora cliente
-
-En la computadora cliente, abre PowerShell y entra en la carpeta del repositorio. En la **Terminal 2 del cliente**, utiliza la IP real del servidor:
-
-```powershell
-Set-Location "RUTA\infraestructura-comunicaciones-seguras"
-$env:COMMUNICATION_MODE = "tcp"
-$env:TCP_HOST = "192.168.1.50"
-$env:TCP_PORT = "5000"
-python -m src.comunicaciones_seguras.tcp_client "Prueba TCP entre equipos"
-```
-
-Cambia `192.168.1.50` por la dirección real del servidor. El resultado esperado es una respuesta que empieza por `RECIBIDO:`. Esto confirma la comunicación entre computadoras; el contenido de esta prueba TCP no está cifrado. Cuando termines, detén el servidor con `Ctrl+C`.
-
-### Prueba TLS entre computadoras
-
-Para TLS no basta con cambiar la IP del cliente: el certificado del servidor tiene que identificar el nombre que utiliza el cliente. El certificado generado en la sección 3 solo incluye `localhost` y `127.0.0.1`, por lo que no validará la dirección IP de otro equipo. Genera un certificado de servidor cuyo SAN contenga la IP real o el nombre DNS de la computadora servidor y fírmalo con la CA de laboratorio. Conserva la clave privada fuera del repositorio.
-
-En la computadora servidor, usa el certificado nuevo y su clave privada:
-
-```powershell
-$env:COMMUNICATION_MODE = "tls"
-$env:TCP_HOST = "0.0.0.0"
-$env:TCP_PORT = "5001"
-$env:TLS_CERT_FILE = "RUTA\server.crt"
-$env:TLS_KEY_FILE = "RUTA\server.key"
-python -m src.comunicaciones_seguras.tcp_server
-```
-
-En la computadora cliente, copia de forma segura el certificado público de la CA, no la clave privada de la CA. Configura la IP de conexión y el nombre que aparece en el SAN del certificado:
-
-```powershell
-$env:COMMUNICATION_MODE = "tls"
-$env:TCP_HOST = "192.168.1.50"
-$env:TCP_PORT = "5001"
-$env:TLS_CA_FILE = "RUTA\root-ca.crt"
-$env:TLS_SERVER_NAME = "192.168.1.50"
-python -m src.comunicaciones_seguras.tcp_client "Prueba TLS entre equipos"
-```
-
-Los valores de ruta son marcadores y deben reemplazarse por las rutas existentes en cada computadora. Si el SAN contiene un nombre DNS en lugar de la IP, configura `TLS_SERVER_NAME` con ese nombre y asegúrate de que el cliente pueda resolverlo. La prueba correcta debe mostrar que TLS validó el certificado y que se recibió la respuesta. Si la validación falla, revisa la CA, el SAN, las fechas del certificado y el nombre configurado; no desactives la validación para evitar el error.
-
-### Qué terminal debe permanecer abierta
-
-- **Terminal 1 (servidor):** permanece ejecutando `tcp_server`; aquí se observan mensajes de inicio y errores del servidor.
-- **Terminal 2 (cliente):** ejecuta `tcp_client` una vez por cada mensaje de prueba y muestra el resultado de la conexión.
-- **Terminal de pruebas:** cuando no necesites mantener un servidor abierto, ejecuta `python -m unittest discover -s tests -p "test*.py" -v` en la raíz del repositorio. Las variables de entorno de TLS deben definirse en esa misma terminal antes de lanzar las pruebas.
-
-No compartas claves privadas ni copies `server.key` o `root-ca.key` a la computadora cliente. El cliente solo necesita el certificado público de la CA para validar al servidor.
+Las pruebas de TCP, TLS, usuarios, permisos, IPsec simulado y VPN simuladas se ejecutan en una sola computadora. SSH necesita el servidor OpenSSH de la sección 9 y la comprobación entre dos computadoras necesita ambos equipos. Una VPN real con strongSwan es opcional y requiere sus propios gateways.

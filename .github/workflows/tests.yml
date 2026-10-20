@@ -19,3 +19,5 @@ jobs:
           python-version: "3.13"
       - name: Run automated tests
         run: python -m unittest discover -s tests -p "test*.py" -v
+      - name: Run VPN demonstration
+        run: python -m src.comunicaciones_seguras.vpn_demo

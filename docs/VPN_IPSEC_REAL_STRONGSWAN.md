@@ -188,9 +188,10 @@ No reutilices el ejemplo sitio a sitio como si fuera una configuración completa
 
 ## Relación con el código Python
 
-- `ipsec_sim.py` permite estudiar encapsulación, autenticación HMAC y anti-replay en el nivel de aplicación; no implementa el protocolo IPsec del kernel.
-- strongSwan negocia asociaciones de seguridad IKE/IPsec y protege tráfico IP entre redes reales.
+- `vpn_sim.py` representa en software las dos VPN (acceso remoto y sitio a sitio) para demostrar sus diferencias y sus controles; se ejecuta con `python -m src.comunicaciones_seguras.vpn_demo` y se prueba con `tests/test_vpn_sim.py`. No crea túneles del sistema operativo.
+- `ipsec_sim.py` permite estudiar encapsulación, autenticación HMAC y anti-replay en el nivel de aplicación; no implementa el protocolo IPsec del kernel. `vpn_sim.py` lo reutiliza en modo túnel para el escenario sitio a sitio.
+- strongSwan negocia asociaciones de seguridad IKE/IPsec y protege tráfico IP entre redes reales. Es la alternativa real a lo que el código simula.
 - TLS protege la conexión cliente-servidor de esta aplicación; una VPN y TLS tienen alcances distintos y pueden coexistir.
-- La integración real de VPN debe probarse aparte de `python -m unittest`; las pruebas unitarias no crean gateways ni túneles automáticamente.
+- La VPN real se prueba aparte de `python -m unittest`: las pruebas unitarias no crean gateways ni túneles.
 
-No marques los requisitos de VPN como demostrados hasta completar la configuración con direcciones reales del laboratorio y guardar evidencia del estado del túnel y del tráfico entre subredes.
+Si presentas una VPN real, conserva como evidencia el estado del túnel y los contadores de tráfico entre subredes en ambos sentidos.
