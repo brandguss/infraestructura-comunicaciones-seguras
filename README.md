@@ -2,15 +2,6 @@
 
 Proyecto en Python para practicar comunicaciones TCP, conexiones TLS con certificados digitales, autenticación y autorización por roles, auditoría, administración remota mediante SSH y conceptos de IPsec. Incluye pruebas automatizadas y guías para preparar el entorno y verificar los resultados.
 
-## Guías del proyecto: cuál seguir y en qué orden
-
-**Empieza por la guía principal y sigue sus pasos en el orden indicado, desde el paso 1 hasta el final.** No necesitas leer ni ejecutar primero la guía de VPN.
-
-1. **[Guía principal: instalación y ejecución paso a paso](docs/GUIA_PASO_A_PASO_WINDOWS.md)** — es el recorrido principal del proyecto. Sigue los pasos en orden; cada etapa explica qué preparar, qué comando ejecutar, qué resultado esperar y cómo comprobar si puedes continuar. Incluye TCP, TLS, certificados, usuarios, permisos, auditoría, SSH y pruebas. Si una prueba falla, detente en ese paso y revisa su solución antes de avanzar.
-2. **[Guía complementaria: VPN IPsec con strongSwan](docs/VPN_IPSEC_REAL_STRONGSWAN.md)** — consúltala únicamente para configurar y comprobar una VPN IPsec real en gateways compatibles, si tu práctica requiere ese escenario. Es una configuración adicional que depende de equipos/redes y herramientas externas; no es necesaria para ejecutar las pruebas locales básicas y el programa Python no crea el túnel automáticamente.
-
-**Importante:** las pruebas locales pueden ejecutarse en una computadora, pero no demuestran por sí solas la comunicación entre dos computadoras, la integración SSH real ni una VPN real. La guía principal indica cuándo interviene una configuración externa. Registra como comprobado únicamente aquello que hayas ejecutado y verificado.
-
 ## Arquitectura y objetivo de cada mecanismo
 
 El proyecto separa los mecanismos porque no resuelven el mismo problema. TCP permite transportar mensajes, TLS protege la sesión entre cliente y servidor, la CA permite validar la identidad del servidor, SSH sirve para administración remota, y la simulación IPsec representa la protección de paquetes y el control anti-replay. La autenticación identifica al usuario; la autorización decide qué operaciones puede realizar; la auditoría deja constancia de las decisiones.
@@ -109,6 +100,13 @@ python --version
 **Resultado esperado:** Git termina sin errores, se crea la carpeta `infraestructura-comunicaciones-seguras` y `python --version` muestra una versión compatible de Python. Si `python` no se reconoce, instala Python con la opción **Add Python to PATH** activada y reinicia la terminal.
 
 **Siguiente paso obligatorio:** abre la [guía principal](docs/GUIA_PASO_A_PASO_WINDOWS.md) y continúa desde el paso 1. No ejecutes la suite inicial por separado aquí; la guía principal indica cuándo hacerlo y qué resultado comprobar.
+
+### Guías para continuar
+
+1. **[Guía principal: instalación y ejecución paso a paso](docs/GUIA_PASO_A_PASO_WINDOWS.md)**. Después de clonar el repositorio, sigue esta guía desde el paso 1 hasta el final. Ejecuta los comandos en orden y compara cada resultado con el esperado antes de continuar.
+2. **[Guía complementaria: VPN IPsec con strongSwan](docs/VPN_IPSEC_REAL_STRONGSWAN.md)**. Úsala solo si necesitas configurar una VPN real; requiere gateways y redes compatibles y no forma parte de la preparación inicial del proyecto.
+
+No vuelvas a clonar el repositorio si ya lo tienes descargado. La guía principal es el procedimiento de ejecución; el resto del README sirve como referencia, no como una secuencia alternativa de pasos.
 
 ## 6. Prueba rápida de TCP
 
