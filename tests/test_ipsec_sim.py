@@ -229,7 +229,13 @@ class IPSecTCPIntegrationTests(unittest.TestCase):
                 thread = threading.Thread(
                     target=handle_connection,
                     args=(server, ("local", 0)),
-                    kwargs={"ipsec_simulator": receiver, "ipsec_required": True, "controller": controller, "audit_logger": audit},
+                    kwargs={
+    "ipsec_simulator": receiver,
+    "ipsec_required": True,
+    "controller": controller,
+    "audit_logger": audit,
+    "allow_insecure_tcp_auth": True,
+},
                 )
                 thread.start()
                 client.sendall(message.encode("utf-8"))
