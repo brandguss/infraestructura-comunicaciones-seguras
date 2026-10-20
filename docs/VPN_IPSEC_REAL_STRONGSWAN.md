@@ -129,9 +129,60 @@ Desde un host de la LAN A, prueba una dirección real de un host permitido en LA
 
 Si falla, revisa `sudo journalctl -u strongswan-starter --since "10 minutes ago"`, la conectividad entre las IP de los gateways, las identidades configuradas, el secreto compartido, las rutas y las políticas de firewall. No publiques logs con secretos ni archivos `ipsec.secrets`.
 
-## VPN de acceso remoto
+## VPN de acceso remoto IKEv2 con autenticación individual
 
-La VPN de acceso remoto es otra topología: cada usuario se conecta desde un equipo cliente a un gateway, recibe una dirección del pool VPN y accede solo a las subredes autorizadas. Para implementarla de forma real se recomienda IKEv2 con certificados de servidor confiables y autenticación individual del usuario (por ejemplo EAP), no compartir una única PSK entre todos los usuarios. Debes preparar la CA/certificado del gateway, el método de autenticación de clientes, un pool de direcciones sin solapamiento, rutas y reglas de firewall; la configuración concreta depende del sistema cliente y del método de autenticación elegido.
+La VPN de acceso remoto es otra topología: cada usuario se conecta desde un equipo cliente a un gateway, recibe una dirección del pool VPN y accede solo a las subredes autorizadas. El ejemplo siguiente usa certificados para autenticar al gateway y EAP-MSCHAPv2 para autenticar al usuario. Debes contar con una CA confiable y un certificado de servidor cuyo SAN/identidad coincida con el nombre configurado en el cliente.
+
+En el gateway instala el certificado firmado y su clave privada en las rutas indicadas. No generes ni copies una clave privada dentro del repositorio. Ejemplo de configuración en `/etc/ipsec.conf` (reemplaza nombres, rutas y subredes):
+
+```conf
+config setup
+    uniqueids= yes
+
+conn ikev2-eap
+    auto= add
+    type= tunnel
+    keyexchange= ikev2
+    fragmentation= yes
+    forceencaps= yes
+    dpdaction= clear
+    dpddelay= 300s
+    rekey= no
+    left= %any
+    leftid= @vpn.example.com
+    leftauth= pubkey
+    leftcert= server-cert.pem
+    leftsendcert= always
+    leftsubnet= 10.10.0.0/24
+    right= %any
+    rightauth= eap-mschapv2
+    rightsourceip= 10.30.0.0/24
+    rightdns= 10.10.0.1
+    rightsendcert= never
+    eap_identity= %identity
+    ike= aes256-sha256-modp2048!
+    esp= aes256-sha256!
+```
+
+Guarda el certificado público del gateway en `/etc/ipsec.d/certs/server-cert.pem` y la clave privada correspondiente en `/etc/ipsec.d/private/server-key.pem`, de acuerdo con las rutas configuradas por la instalación. En `/etc/ipsec.secrets` configura la clave del certificado y una contraseña individual para cada usuario:
+
+```conf
+: RSA server-key.pem
+alice : EAP "REEMPLAZAR_POR_UNA_CONTRASENA_UNICA_LARGA"
+```
+
+Asegúrate de que `server-key.pem` se encuentre en el directorio de claves privadas que utiliza la instalación y protege `ipsec.secrets`:
+
+```bash
+sudo chown root:root /etc/ipsec.secrets
+sudo chmod 600 /etc/ipsec.secrets
+sudo ipsec restart
+sudo ipsec statusall
+```
+
+El cliente debe confiar en la CA que firmó el certificado del gateway, usar IKEv2, validar el nombre del servidor y autenticarse con su usuario EAP. No se debe desactivar la validación del certificado. El nombre `vpn.example.com` es un marcador: usa un nombre que resuelva a la IP del gateway y que coincida con la identidad/certificado real.
+
+Configura forwarding y reglas de firewall con acceso solo a las subredes y puertos necesarios. No abras todo el tráfico de la LAN por defecto. Si se necesita acceso a Internet a través de la VPN, esa política requiere rutas y reglas NAT explícitas, que no se incluyen aquí porque dependen de la topología.
 
 No reutilices el ejemplo sitio a sitio como si fuera una configuración completa de acceso remoto. Tampoco copies una clave de ejemplo a producción. La prueba de aceptación debe confirmar: autenticación válida, rechazo de credenciales/certificados no válidos, asignación de IP VPN, acceso a recursos permitidos, bloqueo de recursos no autorizados y desconexión/revocación del usuario.
 
