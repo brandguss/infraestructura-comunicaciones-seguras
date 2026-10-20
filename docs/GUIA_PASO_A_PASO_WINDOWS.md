@@ -1,10 +1,10 @@
 # Guía paso a paso para Windows y PowerShell
 
-Esta guía usa Windows, PowerShell y una sola computadora para las pruebas locales. Todos los comandos se ejecutan desde la carpeta raíz del repositorio. No pegues claves privadas ni contraseñas en el código ni las subas a GitHub.
+Esta guía te lleva desde la preparación de Windows hasta la comprobación de cada parte del proyecto. Primero se prueban las comunicaciones en una sola computadora; después se preparan los certificados, los usuarios, la auditoría, la simulación IPsec y la integración SSH. Cada bloque explica para qué sirve, qué debe pasar en pantalla y cómo interpretar un error. Los archivos que contienen claves y datos de usuarios se guardan fuera del repositorio para evitar que terminen publicados en GitHub.
 
 ## 1. Abrir el proyecto y comprobar Python
 
-Abre dos terminales de PowerShell en VS Code. En ambas, cambia a la carpeta del proyecto:
+Abre dos terminales de PowerShell en VS Code. La primera se usará normalmente para mantener el servidor en ejecución y la segunda para lanzar el cliente o las pruebas. El comando `Set-Location` coloca la terminal dentro del proyecto, mientras que `python --version` confirma que Windows encuentra Python y `git status --short` permite ver si hay cambios locales pendientes.
 
 ```powershell
 Set-Location "$env:USERPROFILE\OneDrive\Documentos\SDI\infraestructura-comunicaciones-seguras"
@@ -14,7 +14,7 @@ git status --short
 
 Se requiere Python 3.13 o una versión compatible. Si `python` no se reconoce, instala Python desde python.org y marca **Add Python to PATH**; después cierra y vuelve a abrir VS Code. El comando `git status --short` debe mostrar los cambios locales, si existen.
 
-No hace falta instalar paquetes de Python: el proyecto usa la biblioteca estándar. Comprueba que las pruebas se descubren:
+No necesitas instalar paquetes externos de Python para ejecutar las pruebas actuales, porque se utiliza la biblioteca estándar. El siguiente comando busca los archivos de prueba dentro de `tests` y ejecuta cada caso encontrado. Sirve como primera comprobación: si falla aquí, conviene resolver ese error antes de iniciar servidores o configurar la red.
 
 ```powershell
 python -m unittest discover -s tests -p "test*.py" -v
@@ -22,7 +22,7 @@ python -m unittest discover -s tests -p "test*.py" -v
 
 ## 2. Preparar las carpetas externas
 
-Los certificados, las claves, el archivo de usuarios y la auditoría se guardan fuera del repositorio:
+Se crea una carpeta de trabajo dentro de tu perfil de Windows para separar los archivos privados del código fuente. `$pki` contendrá los certificados de la autoridad certificadora y del servidor; `$auth` contendrá las cuentas y el registro de auditoría. Así se pueden regenerar los archivos del laboratorio sin mezclarlos con el código que se sube a GitHub.
 
 ```powershell
 $base = Join-Path $env:USERPROFILE ".infraestructura-comunicaciones-seguras"
@@ -35,7 +35,7 @@ No elimines ni reemplaces claves privadas que ya uses. Los siguientes pasos crea
 
 ## 3. Crear CA y certificado TLS de servidor
 
-Instala OpenSSL 3.x si no lo tienes. Si el comando `openssl` no está en PATH, ajusta la ruta de `$env:OPENSSL_EXE` al ejecutable instalado:
+OpenSSL crea las claves y certificados que TLS necesita para demostrar la identidad del servidor. El primer bloque intenta usar `openssl` si Windows ya lo reconoce; si no, utiliza la ruta indicada en `$env:OPENSSL_EXE`. La salida de `openssl version` debe mostrar una versión instalada. Si el comando no encuentra el archivo, corrige la ruta antes de continuar.
 
 ```powershell
 $env:OPENSSL_EXE = "C:\Program Files\OpenSSL-Win64\bin\openssl.exe"
@@ -43,7 +43,7 @@ $openssl = if (Get-Command openssl -ErrorAction SilentlyContinue) { "openssl" } 
 & $openssl version
 ```
 
-Genera una CA de laboratorio y una clave/certificado de servidor con SAN para `localhost` y `127.0.0.1`. Antes de generar, comprueba que los nombres no existan: OpenSSL puede sobrescribir archivos de clave existentes.
+En este paso se crea una autoridad certificadora local (CA) y se utiliza para firmar el certificado del servidor. El archivo `root-ca.key` es la clave privada de la CA; el archivo `root-ca.crt` es el certificado público que el cliente utilizará para confiar en el servidor. `server.key` identifica al servidor, y `server.crt` es el certificado que se presenta durante TLS. El SAN incluye `localhost` y `127.0.0.1` para que el cliente pueda verificar el nombre con el que se conecta. La comprobación previa evita reemplazar claves existentes por accidente.
 
 ```powershell
 $protectedFiles = @("$pki\\ca\\root-ca.key", "$pki\\ca\\root-ca.crt", "$pki\\server\\server.key", "$pki\\server\\server.csr", "$pki\\server\\server.crt", "$pki\\untrusted-ca\\other-ca.key", "$pki\\untrusted-ca\\other-ca.crt")
@@ -62,7 +62,7 @@ extendedKeyUsage=serverAuth
 & $openssl x509 -req -in "$pki\server\server.csr" -CA "$pki\ca\root-ca.crt" -CAkey "$pki\ca\root-ca.key" -CAcreateserial -out "$pki\server\server.crt" -days 365 -sha256 -extfile "$pki\server\server-extensions.cnf"
 ```
 
-Crea otra CA independiente para probar el rechazo de confianza:
+Se genera una segunda CA que no es la que firmó el certificado del servidor. Más adelante se utiliza para comprobar que el cliente rechaza certificados emitidos por una autoridad desconocida. Esta prueba es importante porque una conexión TLS no debe aceptarse solamente porque el servidor responda; el cliente también debe comprobar quién firmó el certificado.
 
 ```powershell
 & $openssl genrsa -out "$pki\untrusted-ca\other-ca.key" 2048
@@ -79,7 +79,7 @@ Los archivos `.key` son secretos. No los compartas ni los incluyas en capturas p
 
 ## 4. Ejecutar TCP sin cifrar (dos terminales)
 
-Este modo solo sirve para mostrar el eco de mensajes de prueba. No envíes contraseñas ni información privada por TCP sin cifrar.
+Esta primera ejecución comprueba que cliente y servidor pueden intercambiar datos por TCP. En la terminal del servidor se configura el puerto `5000` y se deja el proceso esperando conexiones; el cliente se conecta al mismo puerto y envía un mensaje. El resultado correcto es una respuesta que empieza con `RECIBIDO:`. Esta prueba comprueba conectividad y manejo básico de mensajes, pero no cifra el contenido.
 
 **Terminal 1 — servidor:**
 
@@ -133,7 +133,7 @@ $env:TLS_SERVER_NAME = "localhost"
 python -m src.comunicaciones_seguras.tcp_client "Mensaje TLS de prueba"
 ```
 
-El cliente debe informar que la conexión TLS está validada y recibir el eco. Si aparece un error de certificado, revisa la ruta de la CA y que el nombre usado por el cliente coincida con el SAN del certificado. No desactives la validación TLS para ocultar el error.
+Esta segunda prueba repite el intercambio, ahora con TLS. El servidor utiliza `server.crt` y `server.key`; el cliente utiliza `root-ca.crt` para comprobar la firma y `localhost` para verificar el nombre del servidor. La conexión se considera correcta cuando el cliente valida el certificado y recibe el mensaje de respuesta. Si aparece un error de CA, revisa qué certificado se está usando; si aparece un error de nombre, comprueba el SAN. No se debe quitar la validación para hacer desaparecer el error, porque esa validación es precisamente lo que se está comprobando.
 
 ## 6. Preparar usuarios, roles y auditoría
 
@@ -146,7 +146,7 @@ $env:AUDIT_LOG_FILE = Join-Path $auth "audit.jsonl"
 python -m src.comunicaciones_seguras.user_setup
 ```
 
-Se solicitará crear y confirmar una contraseña para cada cuenta de laboratorio: `admin`, `operador` y `consulta`. No se muestran las contraseñas mientras las escribes.
+Esta utilidad prepara tres cuentas de prueba con diferentes permisos. Escribe y confirma las contraseñas cuando la herramienta las solicite; PowerShell no mostrará los caracteres. Los datos se guardan en `users.json`, fuera del repositorio. El servidor y el cliente deben apuntar al mismo archivo de usuarios para que las credenciales creadas coincidan con las que se validan durante las pruebas.
 
 Para probar operaciones protegidas, reinicia el servidor TLS de la sección anterior con estas variables en la **Terminal 1**, antes de ejecutarlo:
 
@@ -172,11 +172,11 @@ python -m src.comunicaciones_seguras.tcp_client --username admin --operation adm
 python -m src.comunicaciones_seguras.tcp_client --username consulta --operation list_resources
 ```
 
-La primera operación debe autorizarse si escribes la contraseña correcta. La segunda debe denegarse por permisos insuficientes: el rol consulta no tiene permiso para listar recursos. Revisa los eventos generados en `$auth\audit.jsonl`; el archivo no debe contener contraseñas.
+Con el servidor TLS reiniciado y las rutas de usuarios y auditoría configuradas, la primera orden inicia sesión como `admin` y solicita una operación administrativa. Debe ser aceptada si se introduce la contraseña correcta. La segunda intenta una operación que el rol `consulta` no tiene permitida y debe ser rechazada. Esta diferencia comprueba que el servidor decide los permisos según el rol y no solo según el nombre que envía el cliente. Al final, abre el archivo `audit.jsonl` para confirmar que quedaron eventos de aceptación y rechazo; revisa que no se registren contraseñas.
 
 ## 7. Probar rechazo de certificados y ejecutar la suite completa
 
-Esta sección necesita que hayas creado los certificados en el paso 3. Define estas variables en la misma terminal donde ejecutarás las pruebas:
+Las pruebas TLS necesitan rutas hacia los certificados que acabas de crear. Estas variables se definen en la terminal desde la que ejecutarás `unittest`; no se comparten automáticamente entre terminales de PowerShell. Al indicar también la CA no confiable, se habilita la prueba que debe fallar de forma controlada cuando el cliente no confía en la autoridad que firma un certificado.
 
 ```powershell
 $pki = Join-Path $env:USERPROFILE ".infraestructura-comunicaciones-seguras\pki"
@@ -192,7 +192,7 @@ El resultado esperado para las pruebas automatizadas es cero fallos. Si SSH no e
 
 ## 8. Configurar y probar la simulación educativa tipo IPsec
 
-**Importante:** este módulo simula formato de paquete, modos transporte/túnel, HMAC y anti-replay dentro de la aplicación. No crea una interfaz de red, no cifra la carga y no establece un túnel IPsec interoperable.
+Este componente sirve para estudiar conceptos relacionados con IPsec desde el programa Python: identifica paquetes, calcula un HMAC para detectar cambios y permite probar el rechazo de mensajes repetidos. No cifra la carga ni crea una interfaz de red del sistema operativo, por lo que sus resultados comprueban la simulación y no un túnel VPN real. Para generar la clave se utiliza una ruta fuera del repositorio y se configura el mismo archivo en cliente y servidor.
 
 En una terminal, crea una clave externa nueva (el comando no sobrescribe una existente):
 
@@ -248,7 +248,7 @@ python -m unittest discover -s tests -p "test_ipsec_sim.py" -v
 
 ## 9. Integración SSH real con OpenSSH (opcional)
 
-La prueba de integración usa el cliente OpenSSH instalado en Windows y necesita un servidor SSH accesible, un usuario permitido, autenticación por clave y una clave de host confiable en `known_hosts`. Tener `sshd` ejecutándose no garantiza que la prueba pase: la cuenta debe aceptar la clave pública correspondiente.
+Esta prueba comprueba una conexión SSH real mediante OpenSSH, no una simulación en Python. Para que funcione, el servidor debe estar activo, la cuenta de destino debe autorizar la clave pública y el cliente debe reconocer la clave de identidad del servidor. El hecho de que el servicio `sshd` esté encendido solo confirma que escucha; no demuestra que la autenticación por clave ya esté configurada.
 
 Genera una clave dedicada para este laboratorio (si no existe):
 
@@ -277,7 +277,7 @@ Si no se ha preparado la clave, el usuario remoto o la confianza del host, deja 
 
 ## 10. Ejecución desde dos computadoras de la misma red
 
-La prueba local anterior usa `127.0.0.1`, que solo es accesible desde la misma computadora. Para una prueba entre equipos:
+Cuando las pruebas locales funcionan, puedes repetirlas entre dos computadoras conectadas a una red privada. `127.0.0.1` siempre apunta al propio equipo, por lo que en una prueba entre computadoras debe usarse la IP del servidor. El servidor debe escuchar en una interfaz accesible y el firewall debe permitir únicamente el tráfico necesario desde la red de laboratorio.
 
 1. En la computadora servidor, elige una IP privada fija o reservada en el router.
 2. Configura `TCP_HOST=0.0.0.0` en el servidor para escuchar en interfaces IPv4 locales y conserva el puerto `5001` para TLS.
@@ -290,7 +290,7 @@ No expongas el puerto a Internet ni uses la CA de laboratorio para sistemas real
 
 ## 11. VPN de acceso remoto y VPN sitio a sitio: diferencia importante
 
-El repositorio no configura túneles VPN reales. La simulación IPsec de la sección 8 es código Python de nivel aplicación y no equivale a IPsec del sistema operativo. Para demostrar una VPN real necesitas un software/gateway VPN, configuración de interfaces y rutas, claves/certificados, reglas de firewall y dos extremos de red independientes. La VPN de acceso remoto conecta un cliente individual a una red; la VPN sitio a sitio conecta dos redes detrás de gateways.
+La simulación del paso anterior y una VPN real son comprobaciones diferentes. Para una VPN de acceso remoto, un usuario conecta su equipo al gateway y recibe acceso a las redes autorizadas. En una VPN sitio a sitio, dos gateways protegen el tráfico entre dos redes. La guía de strongSwan contiene configuraciones de ejemplo, pero para demostrar el túnel se deben adaptar las direcciones y secretos al laboratorio, levantar ambos extremos y confirmar que el tráfico pasa por la conexión IPsec.
 
 Una prueba de túnel no se puede demostrar únicamente con el eco TCP ni con la simulación. No se presenta este proyecto como VPN real hasta que se configure un gateway real y se compruebe conectividad entre las redes a través del túnel. Las plantillas de configuración deben adaptarse a las redes reales, sin publicar claves privadas ni PSK.
 
@@ -322,7 +322,7 @@ Una prueba de túnel no se puede demostrar únicamente con el eco TCP ni con la 
 
 ## 14. Cierre seguro
 
-Detén los servidores con `Ctrl+C`. Comprueba qué cambios están pendientes antes de publicar:
+Al terminar, detén cada servidor con `Ctrl+C`. Los siguientes comandos permiten revisar los cambios antes de publicarlos: `git status --short` lista los archivos modificados, `git diff --check` busca problemas de espacios y formato, y `git diff` muestra el contenido que se va a incluir. Antes de hacer commit, confirma que no aparezcan claves privadas, contraseñas, archivos de usuarios ni registros de auditoría.
 
 ```powershell
 git status --short
