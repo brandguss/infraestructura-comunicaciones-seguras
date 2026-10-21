@@ -18,7 +18,7 @@ Esta guía es la ruta rápida para ejecutar el cliente y el servidor en la misma
 La ruta que se usó en esta demostración es:
 
 ```powershell
-$project = "C:\Users\brand\OneDrive\Documentos\SDI\infraestructura-comunicaciones-seguras"
+$project = Join-Path $env:USERPROFILE "OneDrive\Documentos\SDI\infraestructura-comunicaciones-seguras"
 Set-Location $project
 Test-Path ".\src\comunicaciones_seguras\tcp_client.py"
 ```
@@ -51,7 +51,7 @@ Si falta un certificado, revisa las secciones 2 y 3 de la [guía completa](GUIA_
 Pega este bloque completo en **Terminal 1**. Déjala abierta:
 
 ```powershell
-$project = "C:\Users\brand\OneDrive\Documentos\SDI\infraestructura-comunicaciones-seguras"
+$project = Join-Path $env:USERPROFILE "OneDrive\Documentos\SDI\infraestructura-comunicaciones-seguras"
 Set-Location $project
 $base = Join-Path $env:USERPROFILE ".infraestructura-comunicaciones-seguras"
 $env:COMMUNICATION_MODE = "tls"
@@ -71,7 +71,7 @@ python -m src.comunicaciones_seguras.tcp_server
 Pega este bloque completo en **Terminal 2**. Es necesario repetir las variables en esta terminal:
 
 ```powershell
-$project = "C:\Users\brand\OneDrive\Documentos\SDI\infraestructura-comunicaciones-seguras"
+$project = Join-Path $env:USERPROFILE "OneDrive\Documentos\SDI\infraestructura-comunicaciones-seguras"
 Set-Location $project
 $base = Join-Path $env:USERPROFILE ".infraestructura-comunicaciones-seguras"
 $env:COMMUNICATION_MODE = "tls"
@@ -180,10 +180,10 @@ No uses `python -m src.comunicaciones_seguras.user_setup --overwrite`: esa opci�
 En una terminal PowerShell, ejecuta:
 
 ```powershell
-$project = "C:\\Users\\brand\\OneDrive\\Documentos\\SDI\\infraestructura-comunicaciones-seguras"
+$project = Join-Path $env:USERPROFILE "OneDrive\Documentos\SDI\infraestructura-comunicaciones-seguras"
 Set-Location $project
 $base = Join-Path $env:USERPROFILE ".infraestructura-comunicaciones-seguras"
-$env:AUTH_USERS_FILE = "$base\\auth\\users.json"
+$env:AUTH_USERS_FILE = "$base\auth\users.json"
 python -m src.comunicaciones_seguras.user_password_reset --username admin
 ```
 
