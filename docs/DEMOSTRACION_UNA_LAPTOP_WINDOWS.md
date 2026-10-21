@@ -175,7 +175,21 @@ Busca `OK` al final. Si alguna prueba aparece como `skipped`, significa que no s
 
 ## Si olvidaste la contraseña
 
-No uses `python -m src.comunicaciones_seguras.user_setup --overwrite`: esa opción reemplaza el archivo completo y recrea los tres usuarios. Para cambiar solo la contraseña de una cuenta de forma segura, consulta al responsable del repositorio o usa el procedimiento de restablecimiento aprobado para esta versión. No compartas el contenido de `users.json`, las claves privadas ni las contraseñas en capturas o mensajes.
+No uses `python -m src.comunicaciones_seguras.user_setup --overwrite`: esa opción reemplaza el archivo completo y recrea los tres usuarios. Usa la utilidad de restablecimiento, que actualiza solo la cuenta indicada y crea una copia de respaldo.
+
+En una terminal PowerShell, ejecuta:
+
+```powershell
+$project = "C:\\Users\\brand\\OneDrive\\Documentos\\SDI\\infraestructura-comunicaciones-seguras"
+Set-Location $project
+$base = Join-Path $env:USERPROFILE ".infraestructura-comunicaciones-seguras"
+$env:AUTH_USERS_FILE = "$base\\auth\\users.json"
+python -m src.comunicaciones_seguras.user_password_reset --username admin
+```
+
+Escribe y confirma la nueva contraseña cuando se solicite. No se mostrarán los caracteres. Para otra cuenta, cambia `admin` por `operador` o `consulta`. Después, reinicia el servidor en Terminal 1 con `Ctrl+C` y vuelve a ejecutar el bloque de inicio del servidor TLS; el servidor debe volver a cargar el almacén de usuarios actualizado. Luego prueba de nuevo la operación protegida desde Terminal 2.
+
+El programa muestra la ruta del respaldo creado, pero nunca imprime la contraseña ni el hash. No compartas el contenido de `users.json`, las claves privadas ni las contraseñas en capturas o mensajes.
 
 ## Qué demuestra la ejecución
 
