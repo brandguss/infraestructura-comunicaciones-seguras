@@ -95,6 +95,14 @@ Debe aparecer `Conexión TLS validada con 127.0.0.1:5001` y una respuesta `RECIB
 
 ## 5. Probar autenticación y permisos
 
+### Antes de empezar: de dónde salen las contraseñas
+
+El repositorio **no incluye contraseñas predeterminadas** para `admin`, `operador` ni `consulta`. Las contraseñas se crean en cada computadora y se guardan fuera del repositorio, en `%USERPROFILE%\\.infraestructura-comunicaciones-seguras\\auth\\users.json`. Ese archivo contiene hashes y sales, no las contraseñas legibles; por eso no se pueden consultar desde GitHub ni recuperar leyendo el archivo.
+
+- **Primera vez en esta computadora y no existe `users.json`:** sigue “Primera configuración de contraseñas” al final de esta guía. Tú defines las contraseñas durante la configuración.
+- **`users.json` ya existe y conoces las contraseñas:** continúa con las pruebas de abajo.
+- **El archivo existe, pero no conoces una o más contraseñas:** sigue “Si olvidaste la contraseña”. Restablece solo las cuentas que necesites; no hace falta cambiar la de `admin` si ya la conoces.
+
 Ejecuta estos comandos **uno por uno** en Terminal 2:
 
 ```powershell
@@ -173,9 +181,32 @@ Busca `OK` al final. Si alguna prueba aparece como `skipped`, significa que no s
 - **`acceso_denegado` con `admin`:** verifica que estás usando la contraseña correcta del almacén externo de usuarios. No recrees todos los usuarios para solucionar una contraseña olvidada.
 - **`usage: tcp_client.py`:** es la ayuda del programa, no un comando que debas copiar.
 
+## Primera configuración de contraseñas
+
+Esta sección es para quien descargó el repositorio y ejecuta el proyecto por primera vez en una computadora donde todavía **no existe** `users.json`. No hay contraseñas iniciales compartidas ni contraseñas por defecto: durante esta preparación, la persona que instala el proyecto define y confirma las contraseñas de las tres cuentas.
+
+Ejecuta en PowerShell desde la raíz del repositorio:
+
+```powershell
+$project = Join-Path $env:USERPROFILE "OneDrive\\Documentos\\SDI\\infraestructura-comunicaciones-seguras"
+Set-Location $project
+$base = Join-Path $env:USERPROFILE ".infraestructura-comunicaciones-seguras"
+$env:AUTH_USERS_FILE = "$base\\auth\\users.json"
+$env:AUDIT_LOG_FILE = "$base\\auth\\audit.jsonl"
+python -m src.comunicaciones_seguras.user_setup
+```
+
+Sigue las indicaciones de la utilidad para crear las contraseñas de `admin`, `operador` y `consulta`. Al escribirlas, los caracteres no se mostrarán; es normal. **Guarda las contraseñas en un lugar seguro**, porque el programa no las puede mostrar después. Comprueba que se haya creado el archivo:
+
+```powershell
+Test-Path "$base\\auth\\users.json"
+```
+
+El resultado debe ser `True`. Si el archivo ya existe y contiene cuentas, no ejecutes esta configuración para “ver” las contraseñas: usa la sección siguiente para cambiar solo la que olvidaste.
+
 ## Si olvidaste la contraseña
 
-No uses `python -m src.comunicaciones_seguras.user_setup --overwrite`: esa opción reemplaza el archivo completo y recrea los tres usuarios. Usa la utilidad de restablecimiento, que actualiza solo la cuenta indicada y crea una copia de respaldo.
+No uses `python -m src.comunicaciones_seguras.user_setup --overwrite`: esa opción reemplaza el archivo completo y recrea los tres usuarios. Si `users.json` ya existe, usa la utilidad de restablecimiento, que actualiza solo la cuenta indicada y crea una copia de respaldo. **Este comando no sirve para la primera configuración si el archivo todavía no existe**; en ese caso usa la sección anterior.
 
 En una terminal PowerShell, ejecuta:
 
