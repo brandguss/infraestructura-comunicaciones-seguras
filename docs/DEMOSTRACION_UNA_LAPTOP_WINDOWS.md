@@ -135,7 +135,27 @@ Get-Content "$env:USERPROFILE\.infraestructura-comunicaciones-seguras\auth\audit
 
 Debe haber eventos de acceso permitido y denegado. El archivo no debe contener contraseñas.
 
-## 7. Comprobar el rechazo de certificados (opcional)
+## 7. Probar la VPN simulada y el bloqueo de operador
+
+Esta prueba es independiente de las cuatro pruebas TLS anteriores. Ejecuta el escenario de VPN de acceso remoto y VPN sitio a sitio que viene en el proyecto.
+
+En PowerShell, desde la raíz del repositorio:
+
+```powershell
+$project = Join-Path $env:USERPROFILE "OneDrive\Documentos\SDI\infraestructura-comunicaciones-seguras"
+Set-Location $project
+python -m src.comunicaciones_seguras.vpn_demo
+```
+
+**Qué debes identificar en la salida:**
+
+- `consulta` puede acceder a `intranet-web`, pero el acceso a `panel-administracion` debe rechazarse por privilegios insuficientes.
+- `operador` queda bloqueado después de tres intentos con contraseña incorrecta; un intento posterior con la contraseña correcta también debe quedar bloqueado en ese escenario.
+- En la prueba sitio a sitio, los casos de replay, modificación e inyección deben aparecer como `RECHAZADO`.
+
+**Importante:** este comando ejecuta una demostración simulada; no es el mismo flujo que las contraseñas solicitadas por `tcp_client` en las pruebas TLS. No necesitas añadir otra prueba de `operador` a la lista de comandos TLS para demostrar este escenario: se muestra al ejecutar `vpn_demo`.
+
+## 8. Comprobar el rechazo de certificados (opcional)
 
 Estas pruebas deben fallar por diseño. Ejecuta una a la vez en Terminal 2 y restaura el valor correcto después de cada prueba:
 
@@ -156,7 +176,7 @@ $env:TLS_SERVER_NAME = "localhost"
 
 También debe rechazarse por discrepancia de nombre. No desactives la validación para hacer pasar estas pruebas: el rechazo es el resultado correcto.
 
-## 8. Ejecutar las pruebas automáticas
+## 9. Ejecutar las pruebas automáticas
 
 Detén el servidor con `Ctrl+C` en Terminal 1. En Terminal 2, ejecuta:
 
