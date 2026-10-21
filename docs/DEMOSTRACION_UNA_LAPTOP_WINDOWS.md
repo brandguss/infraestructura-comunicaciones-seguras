@@ -109,9 +109,10 @@ Ejecuta estos comandos **uno por uno** en Terminal 2:
 python -m src.comunicaciones_seguras.tcp_client --username admin --operation admin_info
 python -m src.comunicaciones_seguras.tcp_client --username consulta --operation status
 python -m src.comunicaciones_seguras.tcp_client --username consulta --operation list_resources
+python -m src.comunicaciones_seguras.tcp_client --username admin --operation status
 ```
 
-Cada comando protegido solicita `Contraseña:`. Escribe la contraseña de ese usuario y presiona Enter. **Es normal que no se vean los caracteres al escribir.** No escribas la contraseña en la línea del comando ni la pegues después de `--operation`.
+Cada comando protegido solicita `Contraseña:`. En los **tres primeros comandos**, escribe la contraseña correcta de ese usuario. En el **cuarto comando**, escribe deliberadamente una contraseña incorrecta para demostrar el rechazo de autenticación. Presiona Enter después de cada una. **Es normal que no se vean los caracteres al escribir.** No escribas la contraseña en la línea del comando ni la pegues después de `--operation`.
 
 Resultados esperados:
 
@@ -119,9 +120,10 @@ Resultados esperados:
 |---|---|
 | `admin` + `admin_info` | `"result": "ok"` |
 | `consulta` + `status` | `"result": "ok"` |
-| `consulta` + `list_resources` | `"result": "denied"`, porque su rol no tiene ese permiso |
+| `consulta` + `list_resources` | `"result": "denied"`: la autenticación funciona, pero el rol no tiene permiso |
+| `admin` + `status` con contraseña incorrecta | `"result": "denied"`: falla la autenticación |
 
-El administrador puede usar `admin_info`; el usuario `consulta` solo tiene permiso para `status`. El servidor determina los permisos; el cliente no envía su rol.
+El administrador puede usar `admin_info`; el usuario `consulta` solo tiene permiso para `status`. La cuarta prueba usa una contraseña incorrecta a propósito. En la bitácora, los rechazos deben distinguir `permiso_insuficiente` de `credenciales_invalidas`. El servidor determina los permisos; el cliente no envía su rol.
 
 ## 6. Ver la auditoría
 
