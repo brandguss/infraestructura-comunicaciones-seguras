@@ -44,7 +44,7 @@ foreach ($archivo in $archivos) {
 }
 ```
 
-Si falta un certificado, revisa las secciones 2 y 3 de la [guía completa](GUIA_PASO_A_PASO_WINDOWS.md). Si falta `users.json`, sigue la sección “Si olvidaste la contraseña” al final de este documento. **No ejecutes `user_setup --overwrite`** para intentar recuperar una cuenta: reemplaza el almacén completo de usuarios.
+Si falta un certificado, revisa las secciones 2 y 3 de la [guía completa](GUIA_PASO_A_PASO_WINDOWS.md). Si falta `users.json` porque es la primera vez que ejecutas el proyecto en esta computadora, crea las cuentas siguiendo “Primera configuración de contraseñas” más abajo. Si el archivo ya existe pero olvidaste una contraseña, sigue “Si olvidaste la contraseña”. **No ejecutes `user_setup --overwrite`** para intentar recuperar una cuenta: reemplaza el almacén completo de usuarios.
 
 ## 2. Terminal 1: iniciar el servidor TLS
 
@@ -187,7 +187,7 @@ $env:AUTH_USERS_FILE = "$base\auth\users.json"
 python -m src.comunicaciones_seguras.user_password_reset --username admin
 ```
 
-Escribe y confirma la nueva contraseña cuando se solicite. No se mostrarán los caracteres. Para otra cuenta, cambia `admin` por `operador` o `consulta`. Después, reinicia el servidor en Terminal 1 con `Ctrl+C` y vuelve a ejecutar el bloque de inicio del servidor TLS; el servidor debe volver a cargar el almacén de usuarios actualizado. Luego prueba de nuevo la operación protegida desde Terminal 2.
+Escribe y confirma la nueva contraseña cuando se solicite. No se mostrarán los caracteres. Para restablecer las cuentas que no conoces, ejecuta también estos comandos, uno por uno, cambiando el nombre de usuario: \n\n```powershell\npython -m src.comunicaciones_seguras.user_password_reset --username operador\npython -m src.comunicaciones_seguras.user_password_reset --username consulta\n```\n\nEjecuta solo los comandos de las cuentas que necesites cambiar; si ya conoces la contraseña de `admin`, no la restablezcas. Después, reinicia el servidor en Terminal 1 con `Ctrl+C` y vuelve a ejecutar el bloque de inicio del servidor TLS; el servidor debe volver a cargar el almacén de usuarios actualizado. Luego prueba de nuevo la operación protegida desde Terminal 2.
 
 El programa muestra la ruta del respaldo creado, pero nunca imprime la contraseña ni el hash. No compartas el contenido de `users.json`, las claves privadas ni las contraseñas en capturas o mensajes.
 
