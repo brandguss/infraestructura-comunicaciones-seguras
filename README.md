@@ -61,7 +61,7 @@ Autenticación y autorización son pasos distintos: la autenticación responde *
 
 ## Cómo ejecutarlo
 
-Toda la puesta en marcha en Windows con PowerShell está en la **[guía paso a paso](docs/GUIA_PASO_A_PASO_WINDOWS.md)**. Resumen del orden:
+Para una ejecución guiada en una sola laptop (servidor y cliente en dos terminales, TLS, roles, auditoría y solución de errores comunes), sigue la **[demostración de una laptop](docs/DEMOSTRACION_UNA_LAPTOP_WINDOWS.md)**. La puesta en marcha completa, SSH y las simulaciones están en la **[guía paso a paso para Windows](docs/GUIA_PASO_A_PASO_WINDOWS.md)**. Resumen del orden:
 
 | Paso | Qué se hace | Guía |
 |---|---|---|
@@ -172,7 +172,7 @@ Las operaciones autenticadas solo se aceptan sobre TLS, salvo que se habilite ex
 | `src/comunicaciones_seguras/config.py` | Lectura y validación de la configuración desde variables de entorno |
 | `src/comunicaciones_seguras/auth.py` | Usuarios, roles, autenticación y autorización |
 | `src/comunicaciones_seguras/audit.py` | Registro de auditoría en JSON Lines |
-| `src/comunicaciones_seguras/user_setup.py` | Crea los usuarios de prueba fuera del repositorio |
+| `src/comunicaciones_seguras/user_setup.py` | Crea los usuarios de prueba fuera del repositorio |\n| `src/comunicaciones_seguras/user_password_reset.py` | Restablece la contraseña de una sola cuenta y conserva las demás, con respaldo |
 | `src/comunicaciones_seguras/ipsec_sim.py` | Simulación de IPsec: modos, HMAC y anti-replay |
 | `src/comunicaciones_seguras/ipsec_key_setup.py` | Crea la clave externa de la simulación |
 | `src/comunicaciones_seguras/vpn_sim.py` | VPN de acceso remoto y VPN sitio a sitio simuladas |
@@ -188,7 +188,7 @@ Las operaciones autenticadas solo se aceptan sobre TLS, salvo que se habilite ex
 python -m unittest discover -s tests -p "test*.py" -v
 ```
 
-La suite cubre: TCP y TLS; validación y rechazo de certificados (nombre incorrecto y CA no confiable); autenticación, permisos por rol y auditoría; ambos modos de IPsec y la detección de replay, paquetes alterados y secuencias fuera de orden; SSH autorizado y no autorizado; y las dos VPN, incluidas las restricciones posteriores a la conexión.
+La suite cubre: TCP y TLS; validación y rechazo de certificados (nombre incorrecto y CA no confiable); autenticación, permisos por rol y auditoría; restablecimiento seguro de contraseña de una sola cuenta; ambos modos de IPsec y la detección de replay, paquetes alterados y secuencias fuera de orden; SSH autorizado y no autorizado; y las dos VPN, incluidas las restricciones posteriores a la conexión.
 
 Algunas pruebas dependen de material externo y se omiten si no está configurado: las de TLS con certificados necesitan las variables `TLS_TEST_*`, y las de integración SSH necesitan un servidor OpenSSH y `SSH_TEST_ENABLED=1`. Una prueba omitida no cuenta como aprobada: la sección 14 de la guía indica cómo ejecutar la suite completa sin omisiones y guardar el resultado como evidencia. El flujo de GitHub Actions ejecuta solo las pruebas que no necesitan ese material externo.
 
