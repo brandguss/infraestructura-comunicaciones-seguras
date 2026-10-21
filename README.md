@@ -61,7 +61,7 @@ Autenticación y autorización son pasos distintos: la autenticación responde *
 
 ## Cómo ejecutarlo
 
-Toda la puesta en marcha en Windows con PowerShell está en la **[guía paso a paso](docs/GUIA_PASO_A_PASO_WINDOWS.md)**. Resumen del orden:
+Para una ejecución guiada en una sola laptop (servidor y cliente en dos terminales, TLS, roles, auditoría y solución de errores comunes), sigue la **[demostración de una laptop](docs/DEMOSTRACION_UNA_LAPTOP_WINDOWS.md)**. La puesta en marcha completa, SSH y las simulaciones están en la **[guía paso a paso para Windows](docs/GUIA_PASO_A_PASO_WINDOWS.md)**. Resumen del orden:
 
 | Paso | Qué se hace | Guía |
 |---|---|---|
