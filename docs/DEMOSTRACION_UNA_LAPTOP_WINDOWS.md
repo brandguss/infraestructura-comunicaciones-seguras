@@ -97,7 +97,7 @@ Debe aparecer `Conexión TLS validada con 127.0.0.1:5001` y una respuesta `RECIB
 
 ### Antes de empezar: de dónde salen las contraseñas
 
-El repositorio **no incluye contraseñas predeterminadas** para `admin`, `operador` ni `consulta`. Las contraseñas se crean en cada computadora y se guardan fuera del repositorio, en `%USERPROFILE%\\.infraestructura-comunicaciones-seguras\\auth\\users.json`. Ese archivo contiene hashes y sales, no las contraseñas legibles; por eso no se pueden consultar desde GitHub ni recuperar leyendo el archivo.
+El repositorio **no incluye contraseñas predeterminadas** para `admin`, `operador` ni `consulta`. Las contraseñas se crean en cada computadora y se guardan fuera del repositorio, en `%USERPROFILE%\.infraestructura-comunicaciones-seguras\auth\users.json`. Ese archivo contiene hashes y sales, no las contraseñas legibles; por eso no se pueden consultar desde GitHub ni recuperar leyendo el archivo.
 
 - **Primera vez en esta computadora y no existe `users.json`:** sigue “Primera configuración de contraseñas” al final de esta guía. Tú defines las contraseñas durante la configuración.
 - **`users.json` ya existe y conoces las contraseñas:** continúa con las pruebas de abajo.
@@ -188,18 +188,18 @@ Esta sección es para quien descargó el repositorio y ejecuta el proyecto por p
 Ejecuta en PowerShell desde la raíz del repositorio:
 
 ```powershell
-$project = Join-Path $env:USERPROFILE "OneDrive\\Documentos\\SDI\\infraestructura-comunicaciones-seguras"
+$project = Join-Path $env:USERPROFILE "OneDrive\Documentos\SDI\infraestructura-comunicaciones-seguras"
 Set-Location $project
 $base = Join-Path $env:USERPROFILE ".infraestructura-comunicaciones-seguras"
-$env:AUTH_USERS_FILE = "$base\\auth\\users.json"
-$env:AUDIT_LOG_FILE = "$base\\auth\\audit.jsonl"
+$env:AUTH_USERS_FILE = "$base\auth\users.json"
+$env:AUDIT_LOG_FILE = "$base\auth\audit.jsonl"
 python -m src.comunicaciones_seguras.user_setup
 ```
 
 Sigue las indicaciones de la utilidad para crear las contraseñas de `admin`, `operador` y `consulta`. Al escribirlas, los caracteres no se mostrarán; es normal. **Guarda las contraseñas en un lugar seguro**, porque el programa no las puede mostrar después. Comprueba que se haya creado el archivo:
 
 ```powershell
-Test-Path "$base\\auth\\users.json"
+Test-Path "$base\auth\users.json"
 ```
 
 El resultado debe ser `True`. Si el archivo ya existe y contiene cuentas, no ejecutes esta configuración para “ver” las contraseñas: usa la sección siguiente para cambiar solo la que olvidaste.
@@ -218,7 +218,14 @@ $env:AUTH_USERS_FILE = "$base\auth\users.json"
 python -m src.comunicaciones_seguras.user_password_reset --username admin
 ```
 
-Escribe y confirma la nueva contraseña cuando se solicite. No se mostrarán los caracteres. Para restablecer las cuentas que no conoces, ejecuta también estos comandos, uno por uno, cambiando el nombre de usuario: \n\n```powershell\npython -m src.comunicaciones_seguras.user_password_reset --username operador\npython -m src.comunicaciones_seguras.user_password_reset --username consulta\n```\n\nEjecuta solo los comandos de las cuentas que necesites cambiar; si ya conoces la contraseña de `admin`, no la restablezcas. Después, reinicia el servidor en Terminal 1 con `Ctrl+C` y vuelve a ejecutar el bloque de inicio del servidor TLS; el servidor debe volver a cargar el almacén de usuarios actualizado. Luego prueba de nuevo la operación protegida desde Terminal 2.
+Escribe y confirma la nueva contraseña cuando se solicite. No se mostrarán los caracteres. Para restablecer otra cuenta, ejecuta el comando correspondiente, uno por uno:
+
+```powershell
+python -m src.comunicaciones_seguras.user_password_reset --username operador
+python -m src.comunicaciones_seguras.user_password_reset --username consulta
+```
+
+Ejecuta solo los comandos de las cuentas que necesites cambiar; si ya conoces la contraseña de `admin`, no la restablezcas. Después, reinicia el servidor en Terminal 1 con `Ctrl+C` y vuelve a ejecutar el bloque de inicio del servidor TLS; el servidor debe volver a cargar el almacén de usuarios actualizado. Luego prueba de nuevo la operación protegida desde Terminal 2.
 
 El programa muestra la ruta del respaldo creado, pero nunca imprime la contraseña ni el hash. No compartas el contenido de `users.json`, las claves privadas ni las contraseñas en capturas o mensajes.
 
